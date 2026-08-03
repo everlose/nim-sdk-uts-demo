@@ -1,0 +1,192 @@
+<template>
+	<scroll-view class="page" scroll-y="true">
+		<view class="panel">
+			<text class="title">好友</text>
+			<text class="sub-title">保留 5 个常用接口。</text>
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">参数</text>
+			<view class="field">
+				<text class="label">好友账号</text>
+				<input class="input" :value="accountId" @input="onAccountIdInput" />
+			</view>
+			<view class="field">
+				<text class="label">账号列表</text>
+				<input class="input" :value="accountIdsText" @input="onAccountIdsInput" />
+			</view>
+			<view class="field">
+				<text class="label">搜索关键字</text>
+				<input class="input" :value="keyword" @input="onKeywordInput" />
+			</view>
+			<view class="field">
+				<text class="label">附言</text>
+				<input class="input" :value="postscript" @input="onPostscriptInput" />
+			</view>
+			<view class="field">
+				<text class="label">监听状态</text>
+				<text class="state-text" :class="listenerEnabled ? 'state-on' : 'state-off'">
+					{{ listenerEnabled ? '已开启' : '未开启' }}
+				</text>
+			</view>
+			<textarea class="listener-box" :value="listenerText" disabled />
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">接口</text>
+			<button class="action-btn action-primary" @tap="handleGetFriendList">获取好友列表</button>
+			<button class="action-btn action-primary" @tap="handleGetFriendByIds">按账号获取好友</button>
+			<button class="action-btn action-primary" @tap="handleAddFriend">添加好友</button>
+			<button class="action-btn action-primary" @tap="handleDeleteFriend">删除好友</button>
+			<button class="action-btn" @tap="toggleListener">{{ listenerEnabled ? '关闭监听' : '开启监听' }}</button>
+		</view>
+
+		<view class="panel result-panel">
+			<text class="panel-title">结果</text>
+			<textarea class="result-box" :value="resultText" disabled />
+		</view>
+	</scroll-view>
+</template>
+
+<script lang="uts">
+	import {
+		V2NIMFriendListener,
+		V2NIMFriendService
+	} from '@/uni_modules/nim-uts-sdk'
+	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
+
+	const FRIEND_ADD_MODE_APPLY = 2
+	let friendService : V2NIMFriendService | null = null
+	let listenerEnabled = false
+	let friendListener : V2NIMFriendListener | null = null
+
+	export default {
+		data() {
+			return {
+				accountId: '',
+				accountIdsText: '',
+				keyword: getStoredString('demo_friend_keyword', '332103'),
+				postscript: getStoredString('demo_friend_postscript', 'hi'),
+				listenerEnabled: listenerEnabled,
+				resultText: '暂无结果',
+				listenerText: '暂无监听内容'
+			}
+		},
+		methods: {
+			ensureService() : V2NIMFriendService {
+				if (friendService == null) {
+					friendService = new V2NIMFriendService()
+				}
+				return friendService!
+			},
+			parseAccountIds() : string[] {
+				const parts = this.accountIdsText.split(',')
+				const result : string[] = []
+				for (let i = 0; i < parts.length; i++) {
+					const item = parts[i].trim()
+					if (item.length > 0) {
+						result.push(item)
+					}
+				}
+				return result
+			},
+			onAccountIdInput(e : InputEvent) { this.accountId = e.detail.value },
+			onAccountIdsInput(e : InputEvent) { this.accountIdsText = e.detail.value },
+			onKeywordInput(e : InputEvent) { this.keyword = e.detail.value },
+			onPostscriptInput(e : InputEvent) { this.postscript = e.detail.value },
+			printResult(title : string, payloadText : string) {
+				this.resultText = title + '\n' + payloadText
+				console.log(title, payloadText)
+			},
+			appendEvent(title : string, payloadText : string) {
+				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
+				console.log(title, payloadText)
+			},
+			handleGetFriendList() {
+				this.ensureService().getFriendList().then((res) => {
+					this.printResult('getFriendList', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.length > 0) {
+						this.accountId = res.data![0].accountId
+						this.accountIdsText = this.accountId
+						setStoredString('demo_friend_accountId', this.accountId)
+						setStoredString('demo_friend_accountIds', this.accountIdsText)
+					}
+					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+				})
+			},
+			handleGetFriendByIds() {
+				this.ensureService().getFriendByIds(this.parseAccountIds()).then((res) => {
+					this.printResult('getFriendByIds', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.length > 0) {
+						this.accountId = res.data![0].accountId
+						this.accountIdsText = this.accountId
+						setStoredString('demo_friend_accountId', this.accountId)
+						setStoredString('demo_friend_accountIds', this.accountIdsText)
+					}
+					uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
+				})
+			},
+			handleAddFriend() {
+				setStoredString('demo_friend_postscript', this.postscript)
+				this.ensureService().addFriend(this.accountId, {
+					addMode: FRIEND_ADD_MODE_APPLY,
+					postscript: this.postscript
+				}).then((res) => {
+					this.printResult('addFriend', JSON.stringify(res))
+					uni.showToast({ title: res.code == 200 ? '已发起' : '失败', icon: 'none' })
+				})
+			},
+			handleDeleteFriend() {
+				this.ensureService().deleteFriend(this.accountId, {
+					deleteAlias: false
+				}).then((res) => {
+					this.printResult('deleteFriend', JSON.stringify(res))
+					uni.showToast({ title: res.code == 200 ? '删除成功' : '删除失败', icon: 'none' })
+				})
+			},
+			toggleListener() {
+				const service = this.ensureService()
+				if (listenerEnabled) {
+					if (friendListener != null) {
+						service.removeFriendListener(friendListener!)
+					}
+					friendListener = null
+					listenerEnabled = false
+				} else {
+					const self = this
+					friendListener = {
+						onFriendAdded(friendInfo) { self.appendEvent('onFriendAdded', JSON.stringify(friendInfo)) },
+						onFriendDeleted(accountId, deletionType) {
+							self.appendEvent('onFriendDeleted', JSON.stringify({ accountId: accountId, deletionType: deletionType }))
+						},
+						onFriendAddApplication(applicationInfo) { self.appendEvent('onFriendAddApplication', JSON.stringify(applicationInfo)) },
+						onFriendAddRejected(rejectionInfo) { self.appendEvent('onFriendAddRejected', JSON.stringify(rejectionInfo)) },
+						onFriendInfoChanged(friendInfo) { self.appendEvent('onFriendInfoChanged', JSON.stringify(friendInfo)) }
+					} as V2NIMFriendListener
+					service.addFriendListener(friendListener!)
+					listenerEnabled = true
+				}
+				this.listenerEnabled = listenerEnabled
+			}
+		}
+	}
+</script>
+
+<style>
+	.page { flex: 1; padding: 24rpx; background-color: #f5f7fb; }
+	.panel { margin-bottom: 24rpx; padding: 24rpx; border-radius: 16rpx; background-color: #ffffff; border-width: 1rpx; border-color: #e5e8ef; }
+	.title { font-size: 38rpx; font-weight: 600; color: #111827; }
+	.sub-title { margin-top: 12rpx; font-size: 26rpx; color: #6b7280; }
+	.panel-title { margin-bottom: 18rpx; font-size: 30rpx; font-weight: 600; color: #1f2937; }
+	.field { margin-bottom: 18rpx; }
+	.label { margin-bottom: 10rpx; font-size: 24rpx; color: #6b7280; }
+	.input { height: 72rpx; padding-left: 20rpx; padding-right: 20rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; }
+	.action-btn { margin-bottom: 16rpx; border-radius: 12rpx; background-color: #f8fafc; color: #111827; font-size: 28rpx; }
+	.action-primary { background-color: #2563eb; color: #ffffff; }
+	.state-text { font-size: 24rpx; }
+	.state-on { color: #16a34a; }
+	.state-off { color: #9ca3af; }
+	.result-panel { margin-bottom: 48rpx; }
+	.listener-box { width: 100%; height: 240rpx; margin-top: 12rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+	.result-box { width: 100%; height: 360rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+</style>

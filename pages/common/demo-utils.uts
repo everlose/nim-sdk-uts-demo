@@ -1,0 +1,34 @@
+export function getStoredString(key : string, defaultValue : string) : string {
+	const value = uni.getStorageSync(key)
+	if (typeof value === 'string' && value.length > 0) {
+		return value
+	}
+	return defaultValue
+}
+
+export function setStoredString(key : string, value : string) {
+	// iOS uni-app-x 当前同步 Storage 桥接会因返回 undefined 抛错。
+	// 缓存仅用于 Demo 输入框回填，不影响 SDK 接口测试，iOS 先跳过持久化。
+	// #ifdef APP-IOS
+	return
+	// #endif
+	uni.setStorageSync(key, value)
+}
+
+export function getStoredBoolean(key : string, defaultValue : boolean) : boolean {
+	const value = uni.getStorageSync(key)
+	if (value === true || value === 'true') {
+		return true
+	}
+	if (value === false || value === 'false') {
+		return false
+	}
+	return defaultValue
+}
+
+export function setStoredBoolean(key : string, value : boolean) {
+	// #ifdef APP-IOS
+	return
+	// #endif
+	uni.setStorageSync(key, value)
+}
