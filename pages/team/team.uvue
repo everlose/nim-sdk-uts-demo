@@ -1,0 +1,207 @@
+<template>
+	<scroll-view class="page" scroll-y="true">
+		<view class="panel">
+			<text class="title">群</text>
+			<text class="sub-title">保留 5 个常用接口。</text>
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">参数</text>
+			<view class="field">
+				<text class="label">群 ID</text>
+				<input class="input" :value="teamId" @input="onTeamIdInput" />
+			</view>
+			<view class="field">
+				<text class="label">群名称</text>
+				<input class="input" :value="name" @input="onNameInput" />
+			</view>
+			<view class="field">
+				<text class="label">成员账号</text>
+				<input class="input" :value="memberAccountId" @input="onMemberAccountIdInput" />
+			</view>
+			<view class="field">
+				<text class="label">监听状态</text>
+				<text class="state-text" :class="listenerEnabled ? 'state-on' : 'state-off'">
+					{{ listenerEnabled ? '已开启' : '未开启' }}
+				</text>
+			</view>
+			<textarea class="listener-box" :value="listenerText" disabled />
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">接口</text>
+			<button class="action-btn action-primary" @tap="handleCreateTeam">创建群</button>
+			<button class="action-btn action-primary" @tap="handleGetJoinedTeamList">获取已加入群列表</button>
+			<button class="action-btn action-primary" @tap="handleGetTeamInfo">获取群资料</button>
+			<button class="action-btn action-primary" @tap="handleGetTeamMemberList">获取群成员列表</button>
+			<button class="action-btn" @tap="toggleListener">{{ listenerEnabled ? '关闭监听' : '开启监听' }}</button>
+		</view>
+
+		<view class="panel result-panel">
+			<text class="panel-title">结果</text>
+			<textarea class="result-box" :value="resultText" disabled />
+		</view>
+	</scroll-view>
+</template>
+
+<script lang="uts">
+	import {
+		V2NIMTeamListener,
+		V2NIMTeamService
+	} from '@/uni_modules/nim-uts-sdk'
+	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
+
+	const TEAM_TYPE_NORMAL = 1
+	const TEAM_JOIN_MODE_FREE = 1
+	const TEAM_INVITE_MODE_ALL = 0
+	const TEAM_AGREE_MODE_NO_AUTH = 1
+	const TEAM_UPDATE_INFO_MODE_ALL = 0
+	const TEAM_UPDATE_EXTENSION_MODE_ALL = 0
+	const TEAM_MEMBER_ROLE_QUERY_TYPE_ALL = 0
+	let teamService : V2NIMTeamService | null = null
+	let listenerEnabled = false
+	let teamListener : V2NIMTeamListener | null = null
+
+	export default {
+		data() {
+			return {
+				teamId: '',
+				name: getStoredString('demo_team_name', 'demo team'),
+				memberAccountId: '',
+				listenerEnabled: listenerEnabled,
+				resultText: '暂无结果',
+				listenerText: '暂无监听内容'
+			}
+		},
+		methods: {
+			ensureService() : V2NIMTeamService {
+				if (teamService == null) {
+					teamService = new V2NIMTeamService()
+				}
+				return teamService!
+			},
+			onTeamIdInput(e : InputEvent) { this.teamId = e.detail.value },
+			onNameInput(e : InputEvent) { this.name = e.detail.value },
+			onMemberAccountIdInput(e : InputEvent) { this.memberAccountId = e.detail.value },
+			printResult(title : string, payloadText : string) {
+				this.resultText = title + '\n' + payloadText
+				console.log(title, payloadText)
+			},
+			appendEvent(title : string, payloadText : string) {
+				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
+				console.log(title, payloadText)
+			},
+			handleCreateTeam() {
+				setStoredString('demo_team_teamId', this.teamId)
+				setStoredString('demo_team_name', this.name)
+				this.ensureService().createTeam({
+					teamType: TEAM_TYPE_NORMAL,
+					name: this.name,
+					avatar: '',
+					intro: 'demo intro',
+					announcement: 'demo announcement',
+					serverExtension: '{}',
+					memberLimit: 100,
+					joinMode: TEAM_JOIN_MODE_FREE,
+					inviteMode: TEAM_INVITE_MODE_ALL,
+					agreeMode: TEAM_AGREE_MODE_NO_AUTH,
+					updateInfoMode: TEAM_UPDATE_INFO_MODE_ALL,
+					updateExtensionMode: TEAM_UPDATE_EXTENSION_MODE_ALL
+				}, null, null, null).then((res) => {
+					this.printResult('createTeam', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.team != null) {
+						this.teamId = res.data!.team!.teamId
+						setStoredString('demo_team_teamId', this.teamId)
+					}
+					uni.showToast({ title: res.code == 200 ? '创建成功' : '创建失败', icon: 'none' })
+				})
+			},
+			handleGetJoinedTeamList() {
+				this.ensureService().getJoinedTeamList(null).then((res) => {
+					this.printResult('getJoinedTeamList', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.length > 0) {
+						this.teamId = res.data![0].teamId
+						this.name = res.data![0].name
+						setStoredString('demo_team_teamId', this.teamId)
+						setStoredString('demo_team_name', this.name)
+					}
+					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+				})
+			},
+			handleGetTeamInfo() {
+				this.ensureService().getTeamInfo(this.teamId, TEAM_TYPE_NORMAL).then((res) => {
+					this.printResult('getTeamInfo', JSON.stringify(res))
+					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+				})
+			},
+			handleGetTeamMemberList() {
+				this.ensureService().getTeamMemberList(this.teamId, TEAM_TYPE_NORMAL, {
+					limit: 20,
+					onlyChatBanned: false,
+					roleQueryType: TEAM_MEMBER_ROLE_QUERY_TYPE_ALL,
+					nextToken: ''
+				}).then((res) => {
+					this.printResult('getTeamMemberList', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.memberList.length > 0) {
+						this.memberAccountId = res.data!.memberList[0].accountId
+						setStoredString('demo_team_memberAccountId', this.memberAccountId)
+					}
+					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+				})
+			},
+			toggleListener() {
+				const service = this.ensureService()
+				if (listenerEnabled) {
+					if (teamListener != null) {
+						service.removeTeamListener(teamListener!)
+					}
+					teamListener = null
+					listenerEnabled = false
+				} else {
+					const self = this
+					teamListener = {
+						onSyncStarted() { self.appendEvent('onSyncStarted', 'started') },
+						onSyncFinished() { self.appendEvent('onSyncFinished', 'finished') },
+						onSyncFailed(error) { self.appendEvent('onSyncFailed', JSON.stringify(error)) },
+						onTeamCreated(team) { self.appendEvent('onTeamCreated', JSON.stringify(team)) },
+						onTeamInfoUpdated(team) { self.appendEvent('onTeamInfoUpdated', JSON.stringify(team)) },
+						onTeamDismissed(team) { self.appendEvent('onTeamDismissed', JSON.stringify(team)) },
+						onTeamJoined(team) { self.appendEvent('onTeamJoined', JSON.stringify(team)) },
+						onTeamLeft(team, isKicked) {
+							self.appendEvent('onTeamLeft', JSON.stringify({ team: team, isKicked: isKicked }))
+						},
+						onTeamMemberJoined(teamMembers) { self.appendEvent('onTeamMemberJoined', JSON.stringify(teamMembers)) },
+						onTeamMemberKicked(operatorAccountId, teamMembers) {
+							self.appendEvent('onTeamMemberKicked', JSON.stringify({ operatorAccountId: operatorAccountId, teamMembers: teamMembers }))
+						},
+						onTeamMemberLeft(teamMembers) { self.appendEvent('onTeamMemberLeft', JSON.stringify(teamMembers)) },
+						onTeamMemberInfoUpdated(teamMembers) { self.appendEvent('onTeamMemberInfoUpdated', JSON.stringify(teamMembers)) },
+						onReceiveTeamJoinActionInfo(joinActionInfo) { self.appendEvent('onReceiveTeamJoinActionInfo', JSON.stringify(joinActionInfo)) }
+					} as V2NIMTeamListener
+					service.addTeamListener(teamListener!)
+					listenerEnabled = true
+				}
+				this.listenerEnabled = listenerEnabled
+			}
+		}
+	}
+</script>
+
+<style>
+	.page { flex: 1; padding: 24rpx; background-color: #f5f7fb; }
+	.panel { margin-bottom: 24rpx; padding: 24rpx; border-radius: 16rpx; background-color: #ffffff; border-width: 1rpx; border-color: #e5e8ef; }
+	.title { font-size: 38rpx; font-weight: 600; color: #111827; }
+	.sub-title { margin-top: 12rpx; font-size: 26rpx; color: #6b7280; }
+	.panel-title { margin-bottom: 18rpx; font-size: 30rpx; font-weight: 600; color: #1f2937; }
+	.field { margin-bottom: 18rpx; }
+	.label { margin-bottom: 10rpx; font-size: 24rpx; color: #6b7280; }
+	.input { height: 72rpx; padding-left: 20rpx; padding-right: 20rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; }
+	.action-btn { margin-bottom: 16rpx; border-radius: 12rpx; background-color: #f8fafc; color: #111827; font-size: 28rpx; }
+	.action-primary { background-color: #2563eb; color: #ffffff; }
+	.state-text { font-size: 24rpx; }
+	.state-on { color: #16a34a; }
+	.state-off { color: #9ca3af; }
+	.result-panel { margin-bottom: 48rpx; }
+	.listener-box { width: 100%; height: 240rpx; margin-top: 12rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+	.result-box { width: 100%; height: 360rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+</style>

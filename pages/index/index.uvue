@@ -1,673 +1,349 @@
 <template>
-	<view class="container">
-		<view class="info-panel">
-			<view class="info-item">
-				<text class="info-label">appkey:</text>
-				<input class="info-input" :value="appkey" @input="onAppkeyInput" />
+	<scroll-view class="page" scroll-y="true">
+		<view class="panel">
+			<text class="title">nim-uts-sdk Demo</text>
+			<text class="sub-title">初始化和登录分开操作，下面进入各模块测试页。</text>
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">初始化</text>
+			<view class="field">
+				<text class="label">appkey</text>
+				<input class="input" :value="appkey" @input="onAppkeyInput" />
 			</view>
-			<view class="info-item">
-				<text class="info-label">账号ID:</text>
-				<input class="info-input" :value="accountId" @input="onAccountIdInput" @blur="onAccountIdBlur" />
-			</view>
-			<view class="info-item">
-				<text class="info-label">账号Token:</text>
-				<input class="info-input" :value="token" @input="onTokenInput" />
-			</view>
-			<view class="info-item">
-				<view class="switch-container">
-					<text class="info-label">云端会话:</text>
-					<switch :checked="enableV2CloudConversation" color="#1989fa" @change="toggleEnvV2CloudConversation" />
-				</view>
-			</view>
-			<view class="info-item">
-				<text class="info-label">当前状态:</text>
-				<text class="info-value" :class="loginStatus === 'logined' ? 'status-connected' : 'status-disconnect'">
-					{{ loginStatus }}
+			<view class="button-row">
+				<button class="action-btn action-primary" @tap="handleInit">初始化</button>
+				<text class="state-text" :class="initialized ? 'state-on' : 'state-off'">
+					{{ initialized ? '已初始化' : '未初始化' }}
 				</text>
 			</view>
-
-			<view class="button-group">
-				<button class="btn btn-connect" @tap="handleLogin">登录</button>
-				<button class="btn btn-destroy" @tap="handleLogout">登出</button>
-				<button class="btn btn-clear" @tap="handleDestroyInstance">销毁实例</button>
-			</view>
-
-			<view class="info-item">
-				<text class="info-label">会话ID:</text>
-				<input class="info-input" :value="conversationId" @input="onConversationIdInput" @blur="onConversationIdBlur" />
-			</view>
-
-			<view class="button-group">
-				<button class="btn btn-send-message" @tap="handleSendText">发文本消息</button>
-				<button
-					:class="['btn btn-send-message', isAttachmentButtonDisabled('image') ? 'btn-disabled' : '']"
-					:disabled="isAttachmentButtonDisabled('image')"
-					@tap="handleSendImage"
-				>
-					{{ getAttachmentButtonText('image', '发图片消息') }}
-				</button>
-				<button class="btn btn-clear" @tap="handleSendImageButCancel">发图片后取消</button>
-			</view>
-
-			<view class="button-group">
-				<button
-					:class="['btn btn-send-message', isAttachmentButtonDisabled('audio') ? 'btn-disabled' : '']"
-					:disabled="isAttachmentButtonDisabled('audio')"
-					@tap="handleSendAudio"
-				>
-					{{ getAttachmentButtonText('audio', '发语音消息') }}
-				</button>
-				<button
-					:class="['btn btn-send-message', isAttachmentButtonDisabled('video') ? 'btn-disabled' : '']"
-					:disabled="isAttachmentButtonDisabled('video')"
-					@tap="handleSendVideo"
-				>
-					{{ getAttachmentButtonText('video', '发视频消息') }}
-				</button>
-				<button
-					:class="['btn btn-send-message', isAttachmentButtonDisabled('file') ? 'btn-disabled' : '']"
-					:disabled="isAttachmentButtonDisabled('file')"
-					@tap="handleSendFile"
-				>
-					{{ getAttachmentButtonText('file', '发文件消息') }}
-				</button>
-			</view>
-
-			<view class="upload-status" v-if="isUploading">
-				<text class="upload-status-title">{{ uploadLabel }} 上传中</text>
-				<text class="upload-status-text">{{ uploadStatusText }}</text>
-			</view>
 		</view>
-	</view>
+
+		<view class="panel">
+			<text class="panel-title">登录</text>
+			<view class="field">
+				<text class="label">账号 ID</text>
+				<input class="input" :value="accountId" @input="onAccountIdInput" />
+			</view>
+			<view class="field">
+				<text class="label">Token</text>
+				<input class="input" :value="token" @input="onTokenInput" />
+			</view>
+			<view class="button-row">
+				<button class="action-btn action-primary" :disabled="!initialized" @tap="handleLogin">登录</button>
+				<button class="action-btn" @tap="handleLogout">登出</button>
+			</view>
+			<text class="state-text" :class="loginStatus === 'logined' ? 'state-on' : 'state-off'">
+				当前状态：{{ loginStatus }}
+			</text>
+			<textarea class="listener-box" :value="listenerText" disabled />
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">模块页面</text>
+			<button class="nav-btn" @tap="goPage('/pages/user/user')">用户</button>
+			<button class="nav-btn" @tap="goPage('/pages/friend/friend')">好友</button>
+			<button class="nav-btn" @tap="goPage('/pages/local-conversation/local-conversation')">本地会话</button>
+			<button class="nav-btn" @tap="goPage('/pages/message/message')">消息</button>
+			<button class="nav-btn" @tap="goPage('/pages/team/team')">群</button>
+		</view>
+
+		<view class="panel result-panel">
+			<text class="panel-title">结果</text>
+			<textarea class="result-box" :value="resultText" disabled />
+		</view>
+	</scroll-view>
 </template>
 
 <script lang="uts">
 	import {
 		initNIMSDK,
-		V2NIMLoginService,
-		V2NIMLoginListener,
-		V2NIMDataSyncLevel,
-		V2NIMLoginStatus,
-		V2NIMMessageService,
-		V2NIMMessageCreate,
-		V2NIMMessage,
 		SDKOptions,
-		NIMResult
+		V2NIMLoginListener,
+		V2NIMLoginService
 	} from '@/uni_modules/nim-uts-sdk'
 	// #ifdef APP-ANDROID
 	import { AndroidSDKOptions } from '@/uni_modules/nim-uts-sdk'
 	// #endif
 	// #ifdef APP-HARMONY
 	import { HarmonySDKOptions } from '@/uni_modules/nim-uts-sdk'
-	import fs from '@ohos.file.fs'
 	// #endif
+	import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from '../common/demo-utils.uts'
+
+	const LOGIN_STATUS_LOGINED = 1
+	const LOGIN_STATUS_LOGINING = 2
+	const DATA_SYNC_LEVEL_FULL = 0
+
+	type DemoLoginConfig = {
+		appKey : string,
+		accountId : string,
+		token : string
+	}
+
+	// Demo 默认登录信息。其他使用者只需要修改这里的 appKey、accountId、token。
+	// 页面输入框仍会优先读取本地缓存；如果想恢复这里的默认值，可清理应用缓存后重新打开 Demo。
+	const DEMO_LOGIN_CONFIG : DemoLoginConfig = {
+		appKey: 'your yunxin appKey',
+		accountId: 'login account id',
+		token: 'login token'
+	}
 
 	let loginService : V2NIMLoginService | null = null
-	let messageService : V2NIMMessageService | null = null
-	let messageCreator : V2NIMMessageCreate | null = null
-	let currentUploadingMessage : V2NIMMessage | null = null
-
-	// #ifdef APP-HARMONY
-	// 鸿蒙 chooseVideo 返回 file://media/ 虚拟 URI，云信 SDK 无法直接读取，
-	// 需先拷贝到 app 沙箱缓存目录再传入；发送结束后删除临时文件。
-	const HARMONY_MEDIA_CACHE_DIR = '/data/storage/el2/base/cache/uni-media'
-
-	function ensureHarmonyMediaCacheDir() {
-		try {
-			fs.mkdirSync(HARMONY_MEDIA_CACHE_DIR, true)
-		} catch (e) {
-			console.warn('mkdirSync uni-media failed', e)
-		}
-	}
-
-	async function copyHarmonyMediaUriToCache(srcUri : string, ext : string) : Promise<string> {
-		ensureHarmonyMediaCacheDir()
-		const dest = `${HARMONY_MEDIA_CACHE_DIR}/nim_video_${Date.now()}.${ext}`
-		const srcFile = await fs.open(srcUri, fs.OpenMode.READ_ONLY)
-		try {
-			await fs.copyFile(srcFile.fd, dest)
-		} finally {
-			await fs.close(srcFile)
-		}
-		return dest
-	}
-
-	function deleteHarmonyFile(path : string) {
-		fs.unlink(path).then(() => {}).catch((e) => {
-			console.warn('deleteHarmonyFile failed', path, e)
-		})
-	}
-	// #endif
-
-	function getStoredBoolean(key : string, defaultValue : boolean) : boolean {
-		const v = uni.getStorageSync(key)
-		if (v === true || v === 'true') return true
-		if (v === false || v === 'false') return false
-		return defaultValue
-	}
-
-	function getStoredString(key : string, defaultValue : string) : string {
-		const v = uni.getStorageSync(key)
-		if (typeof v === 'string' && v.length > 0) return v
-		return defaultValue
-	}
 
 	export default {
 		data() {
 			return {
-				accountId: getStoredString('accountId', 'YOUR_ACCID'),
-				appkey: getStoredString('appkey', 'b94d****a720f'),
-				token: getStoredString('token', 'e10adc****f883e'),
-				enableV2CloudConversation: getStoredBoolean('enableV2CloudConversation', false),
+				appkey: getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey),
+				accountId: getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId),
+				token: getStoredString('demo_token', DEMO_LOGIN_CONFIG.token),
+				initialized: getStoredBoolean('demo_initialized', false),
 				loginStatus: 'logout',
-				conversationId: getStoredString('conversationId', 'YOUR_ACCID|1|TARGET_ACCID'),
-				isUploading: false,
-				isCancellingUpload: false,
-				uploadKind: '',
-				uploadLabel: '',
-				uploadProgress: 0,
-				uploadStatusText: ''
+				resultText: '暂无结果',
+				listenerText: '暂无监听内容'
 			}
 		},
 		methods: {
-			mapLoginStatus(status : V2NIMLoginStatus) : string {
-				if (status == V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) return 'logined'
-				if (status == V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINING) return 'logining'
-				if (status == V2NIMLoginStatus.V2NIM_LOGIN_STATUS_UNLOGIN) return 'unlogin'
-				return 'logout'
+			onAppkeyInput(e : InputEvent) {
+				this.appkey = e.detail.value
 			},
-
-			toggleEnvV2CloudConversation(e : SwitchChangeEvent) {
-				this.enableV2CloudConversation = e.detail.value
-				uni.setStorageSync('enableV2CloudConversation', e.detail.value)
+			onAccountIdInput(e : InputEvent) {
+				this.accountId = e.detail.value
 			},
-
-			onAppkeyInput(e : InputEvent) { this.appkey = e.detail.value },
-			onAccountIdInput(e : InputEvent) { this.accountId = e.detail.value },
-			onAccountIdBlur(e : InputEvent) { uni.setStorageSync('accountId', e.detail.value) },
-			onTokenInput(e : InputEvent) { this.token = e.detail.value },
-			onConversationIdInput(e : InputEvent) { this.conversationId = e.detail.value },
-			onConversationIdBlur(e : InputEvent) { uni.setStorageSync('conversationId', e.detail.value) },
-
-			handleLogin() {
-				uni.showToast({ title: '正在连接...', icon: 'loading', duration: 2000 })
-
+			onTokenInput(e : InputEvent) {
+				this.token = e.detail.value
+			},
+			printResult(title : string, payloadText : string) {
+				this.resultText = title + '\n' + payloadText
+				console.log(title, payloadText)
+			},
+			appendEvent(title : string, payloadText : string) {
+				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
+				console.log(title, payloadText)
+			},
+			buildOptions() : SDKOptions {
+				let options : SDKOptions
+				// #ifdef APP-ANDROID
+				const androidOptions = new AndroidSDKOptions()
+				androidOptions.appKey = this.appkey
+				options = androidOptions
+				// #endif
+				// #ifdef APP-HARMONY
+				const harmonyOptions = new HarmonySDKOptions()
+				harmonyOptions.appKey = this.appkey
+				options = harmonyOptions
+				// #endif
+				// #ifdef APP-IOS
+				options = { appKey: this.appkey } as SDKOptions
+				// #endif
+				return options
+			},
+			ensureLoginService() {
 				if (loginService == null) {
-					let sdkOptions : SDKOptions
-					// #ifdef APP-ANDROID
-					const androidOptions = new AndroidSDKOptions()
-					androidOptions.appKey = this.appkey
-					androidOptions.enableV2CloudConversation = this.enableV2CloudConversation
-					sdkOptions = androidOptions
-					// #endif
-					// #ifdef APP-HARMONY
-					const harmonyOptions = new HarmonySDKOptions()
-					harmonyOptions.appKey = this.appkey
-					sdkOptions = harmonyOptions
-					// #endif
-					// #ifdef APP-IOS
-					sdkOptions = { appKey: this.appkey } as SDKOptions
-					// #endif
-
-					initNIMSDK({
-						options: sdkOptions,
-						success(res) {
-							console.log('init ok', res)
-						},
-						fail(err) {
-							console.error('init fail', err)
-							uni.showToast({ title: '初始化失败', icon: 'error', duration: 2000 })
-						}
-					})
-
 					loginService = new V2NIMLoginService()
-					messageService = new V2NIMMessageService()
-					messageCreator = new V2NIMMessageCreate()
-
 					const self = this
 					loginService.addLoginListener({
-						onLoginStatus(status : V2NIMLoginStatus) {
-							self.loginStatus = self.mapLoginStatus(status)
+						onLoginStatus(status) {
+							if (status == LOGIN_STATUS_LOGINED) {
+								self.loginStatus = 'logined'
+							} else if (status == LOGIN_STATUS_LOGINING) {
+								self.loginStatus = 'logining'
+							} else {
+								self.loginStatus = 'logout'
+							}
+							self.appendEvent('onLoginStatus', JSON.stringify(status))
 						},
 						onLoginFailed(error) {
-							console.error('login failed callback', error)
+							self.appendEvent('onLoginFailed', JSON.stringify(error))
 						}
 					} as V2NIMLoginListener)
 				}
-
+			},
+			handleInit() {
+				initNIMSDK({
+					options: this.buildOptions(),
+					success: (res) => {
+						this.initialized = true
+						setStoredBoolean('demo_initialized', true)
+						setStoredString('demo_appkey', this.appkey)
+						this.printResult('initNIMSDK success', JSON.stringify(res))
+						uni.showToast({ title: '初始化成功', icon: 'success' })
+					},
+					fail: (err) => {
+						this.printResult('initNIMSDK fail', JSON.stringify(err))
+						uni.showToast({ title: '初始化失败', icon: 'none' })
+					}
+				})
+			},
+			handleLogin() {
+				if (!this.initialized) {
+					uni.showToast({ title: '请先初始化', icon: 'none' })
+					return
+				}
+				this.ensureLoginService()
 				loginService!.login(this.accountId, this.token, {
-					syncLevel: V2NIMDataSyncLevel.V2NIM_DATA_SYNC_TYPE_LEVEL_FULL
+					syncLevel: DATA_SYNC_LEVEL_FULL
 				}).then((res) => {
 					if (res.code == 200) {
-						uni.setStorageSync('appkey', this.appkey)
-						uni.setStorageSync('token', this.token)
-						uni.setStorageSync('accountId', this.accountId)
-						uni.showToast({ title: '登录成功', icon: 'success', duration: 2000 })
+						this.loginStatus = 'logined'
+						setStoredString('demo_accountId', this.accountId)
+						setStoredString('demo_token', this.token)
+						uni.showToast({ title: '登录成功', icon: 'success' })
 					} else {
-						console.error('登录失败', res.desc)
-						uni.showToast({ title: '登录失败', icon: 'error', duration: 2000 })
+						uni.showToast({ title: res.desc.length > 0 ? res.desc : '登录失败', icon: 'none' })
 					}
-				}).catch((err) => {
-					console.error('登录失败', err)
-					uni.showToast({ title: '登录失败', icon: 'error', duration: 2000 })
+					this.printResult('login', JSON.stringify(res))
 				})
 			},
-
-			async handleLogout() {
-				if (loginService == null) return
-				try {
-					await loginService.logout()
-					this.resetUploadState()
-					this.loginStatus = 'logout'
-					uni.showToast({ title: '已登出', icon: 'success', duration: 2000 })
-				} catch (err) {
-					console.error('logout failed', err)
-				}
-			},
-
-			handleDestroyInstance() {
+			handleLogout() {
 				if (loginService == null) {
-					uni.showToast({ title: '当前无实例', icon: 'none', duration: 2000 })
+					uni.showToast({ title: '请先登录', icon: 'none' })
 					return
 				}
-				// uts SDK 暂未提供 destroy 接口，这里仅清理本地引用
-				loginService = null
-				messageService = null
-				messageCreator = null
-				this.resetUploadState()
-				this.loginStatus = 'logout'
-				uni.showToast({ title: '实例已销毁', icon: 'success', duration: 2000 })
-			},
-
-			async handleSendText() {
-				if (messageCreator == null || messageService == null) return
-				const message = messageCreator.createTextMessage('一段不会重复的文本' + Date.now().toString())
-				if (message == null) return
-				try {
-					const res = await messageService.sendMessage(message, this.conversationId, null, null)
+				loginService.logout().then((res) => {
 					if (res.code == 200) {
-						console.log('sendText success', res.data)
+						this.loginStatus = 'logout'
+						uni.showToast({ title: '已登出', icon: 'success' })
 					} else {
-						console.error('sendText failed', res.desc)
+						uni.showToast({ title: res.desc.length > 0 ? res.desc : '登出失败', icon: 'none' })
 					}
-				} catch (err) {
-					console.error('sendText failed', err)
-				}
-			},
-
-			handleSendImage() {
-				if (this.uploadKind === 'image') {
-					this.cancelCurrentUpload()
-					return
-				}
-				if (messageCreator == null || messageService == null) return
-				uni.chooseImage({
-					count: 1,
-					success: (result) => {
-						if (messageCreator == null) return
-						const filePath = result.tempFilePaths[0]
-					console.log('chooseImage result', JSON.stringify(result), 'filePath=', filePath)
-						messageCreator.createImageMessage(filePath, '', '').then((message) => {
-							console.log('createImageMessage then', message == null ? 'null' : 'ok')
-							if (message == null) return
-							this.sendMessageWithProgress(message, 'image', '图片')
-						}).catch((err) => {
-							console.error('createImageMessage failed', err)
-						})
-					},
-					fail: (error) => {
-						console.error('chooseImage failed', error.errMsg)
-					}
+					this.printResult('logout', JSON.stringify(res))
 				})
 			},
-
-			handleSendImageButCancel() {
-				if (messageCreator == null || messageService == null || this.isUploading) return
-				uni.chooseImage({
-					count: 1,
-					success: (result) => {
-						if (messageCreator == null) return
-						const filePath = result.tempFilePaths[0]
-					console.log('chooseImage result', JSON.stringify(result), 'filePath=', filePath)
-						messageCreator.createImageMessage(filePath, '', '').then((message) => {
-							console.log('createImageMessage then', message == null ? 'null' : 'ok')
-							if (message == null) return
-							this.sendMessageWithProgress(message, 'image', '图片')
-							setTimeout(() => {
-								this.cancelCurrentUpload()
-							}, 0)
-						})
-					},
-					fail: (error) => {
-						console.error('chooseImage failed', error.errMsg)
-					}
-				})
-			},
-
-			handleSendAudio() {
-				if (this.uploadKind === 'audio') {
-					this.cancelCurrentUpload()
-					return
-				}
-				if (messageCreator == null || messageService == null) return
-				if (typeof uni.chooseMessageFile !== 'function') {
-					uni.showToast({ title: '当前平台不支持选择文件(语音)', icon: 'none', duration: 2000 })
-					return
-				}
-				uni.chooseMessageFile({
-					count: 1,
-					type: 'file',
-					extension: ['mp3', 'wav', 'aac', 'm4a'],
-					success: (result) => {
-						if (messageCreator == null) return
-						const file = result.tempFiles[0]
-						messageCreator.createAudioMessage(file.path, file.name, '').then((message) => {
-							if (message == null) return
-							this.sendMessageWithProgress(message, 'audio', '语音')
-						}).catch((err) => {
-							console.error('createAudioMessage failed', err)
-						})
-					},
-					fail: (error) => {
-						console.error('chooseMessageFile failed', error.errMsg)
-					}
-				})
-			},
-
-			handleSendVideo() {
-				if (this.uploadKind === 'video') {
-					this.cancelCurrentUpload()
-					return
-				}
-				if (messageCreator == null || messageService == null) return
-				uni.chooseVideo({
-					sourceType: ['album', 'camera'],
-					maxDuration: 60,
-					success: (result) => {
-						console.log('chooseVideo success result', JSON.stringify(result))
-						if (messageCreator == null) return
-						const duration = result.duration != null ? Math.round(Number(result.duration) * 1000) : 0
-						const width = result.width != null ? Number(result.width) : 0
-						const height = result.height != null ? Number(result.height) : 0
-						const doCreate = (filePath : string, tempPathToDelete : string) => {
-							console.log('createVideoMessage filePath', filePath)
-							messageCreator!.createVideoMessage(filePath, '', '', duration, width, height).then((message) => {
-								console.log('createVideoMessage then', message == null ? 'null' : 'ok')
-								if (message == null) return
-								this.sendMessageWithProgress(message, 'video', '视频', tempPathToDelete)
-							}).catch((err) => {
-								console.error('createVideoMessage failed', err)
-							})
-						}
-						// #ifdef APP-HARMONY
-						const srcUri = result.tempFilePath
-						copyHarmonyMediaUriToCache(srcUri, 'mp4').then((cachedPath) => {
-							console.log('copyHarmonyMediaUriToCache ok', cachedPath)
-							doCreate(cachedPath, cachedPath)
-						}).catch((err) => {
-							console.error('copyHarmonyMediaUriToCache failed', err)
-							uni.showToast({ title: '视频文件读取失败', icon: 'none', duration: 2000 })
-						})
-						// #endif
-						// #ifndef APP-HARMONY
-						doCreate(result.tempFilePath, '')
-						// #endif
-					},
-					fail: (error) => {
-						console.error('chooseVideo failed', error.errMsg)
-					}
-				})
-			},
-
-			handleSendFile() {
-				if (this.uploadKind === 'file') {
-					this.cancelCurrentUpload()
-					return
-				}
-				if (messageCreator == null || messageService == null) return
-				if (typeof uni.chooseMessageFile !== 'function') {
-					uni.showToast({ title: '当前平台不支持选择文件', icon: 'none', duration: 2000 })
-					return
-				}
-				uni.chooseMessageFile({
-					count: 1,
-					type: 'file',
-					success: (result) => {
-						if (messageCreator == null) return
-						const file = result.tempFiles[0]
-						messageCreator.createFileMessage(file.path, file.name || 'file', '').then((message) => {
-							if (message == null) return
-							this.sendMessageWithProgress(message, 'file', '文件')
-						}).catch((err) => {
-							console.error('createFileMessage failed', err)
-						})
-					},
-					fail: (error) => {
-						console.error('chooseMessageFile failed', error.errMsg)
-					}
-				})
-			},
-
-			getAttachmentButtonText(kind : string, idleText : string) : string {
-				if (this.uploadKind !== kind) return idleText
-				return this.isCancellingUpload ? '取消中...' : '取消当前上传'
-			},
-
-			isAttachmentButtonDisabled(kind : string) : boolean {
-				return this.isUploading && this.uploadKind !== kind
-			},
-
-			resetUploadState() {
-				currentUploadingMessage = null
-				this.isUploading = false
-				this.isCancellingUpload = false
-				this.uploadKind = ''
-				this.uploadLabel = ''
-				this.uploadProgress = 0
-				this.uploadStatusText = ''
-			},
-
-			startUploadState(message : V2NIMMessage, kind : string, label : string) {
-				currentUploadingMessage = message
-				this.isUploading = true
-				this.isCancellingUpload = false
-				this.uploadKind = kind
-				this.uploadLabel = label
-				this.uploadProgress = 0
-				this.uploadStatusText = '等待上传开始'
-			},
-
-			updateUploadProgress(progress : number) {
-				if (this.isCancellingUpload) return
-				const normalized = Math.max(0, Math.min(100, progress))
-				this.uploadProgress = normalized
-				this.uploadStatusText = '上传进度 ' + normalized + '%'
-			},
-
-			sendMessageWithProgress(message : V2NIMMessage, kind : string, label : string, tempPathToDelete : string = '') {
-				if (messageService == null) return
-				if (this.isUploading) {
-					uni.showToast({ title: '请先取消或等待当前上传完成', icon: 'none', duration: 2000 })
-					return
-				}
-				this.startUploadState(message, kind, label)
-				const result = messageService.sendMessage(
-					message,
-					this.conversationId,
-					null,
-					(progress : number) => {
-						if (currentUploadingMessage !== message) return
-						this.updateUploadProgress(progress)
-					}
-				)
-				result.then((res) => {
-					if (currentUploadingMessage !== message) return
-					this.resetUploadState()
-					// #ifdef APP-HARMONY
-					if (tempPathToDelete.length > 0) deleteHarmonyFile(tempPathToDelete)
-					// #endif
-					if (res.code == 200) {
-						uni.showToast({ title: '发送成功', icon: 'success', duration: 2000 })
-					} else {
-						console.error('sendMessage failed', res.desc)
-						uni.showToast({ title: '发送失败', icon: 'none', duration: 2000 })
-					}
-				}).catch((err) => {
-					console.error('sendMessage failed', err)
-					if (currentUploadingMessage !== message) return
-					const isCanceled = this.isCancellingUpload
-					this.resetUploadState()
-					// #ifdef APP-HARMONY
-					if (tempPathToDelete.length > 0) deleteHarmonyFile(tempPathToDelete)
-					// #endif
-					uni.showToast({ title: isCanceled ? '上传已取消' : '发送失败', icon: 'none', duration: 2000 })
-				})
-			},
-
-			async cancelCurrentUpload() {
-				if (messageService == null || currentUploadingMessage == null || !this.isUploading || this.isCancellingUpload) return
-				this.isCancellingUpload = true
-				this.uploadStatusText = '正在取消上传...'
-				try {
-					await messageService.cancelMessageAttachmentUpload(currentUploadingMessage)
-				} catch (error) {
-					this.isCancellingUpload = false
-					this.uploadStatusText = '取消失败'
-					console.error('cancel upload failed', error)
-					uni.showToast({ title: '取消失败', icon: 'error', duration: 2000 })
-				}
+			goPage(url : string) {
+				uni.navigateTo({ url: url })
 			}
 		}
 	}
 </script>
 
 <style>
-	.container {
-		display: flex;
-		flex-direction: column;
-		background-color: #f0f2f5;
+	.page {
+		flex: 1;
 		padding: 24rpx;
+		background-color: #f5f7fb;
 	}
 
-	.info-panel {
-		display: flex;
-		flex-direction: column;
-		background-color: white;
-		border-radius: 16px;
-		padding: 40rpx 28rpx;
-		width: 100%;
+	.panel {
+		margin-bottom: 24rpx;
+		padding: 24rpx;
+		border-radius: 16rpx;
+		background-color: #ffffff;
+		border-width: 1rpx;
+		border-color: #e5e8ef;
 	}
 
-	.info-item {
-		display: flex;
+	.title {
+		font-size: 38rpx;
+		font-weight: 600;
+		color: #111827;
+	}
+
+	.sub-title {
+		margin-top: 12rpx;
+		font-size: 26rpx;
+		color: #6b7280;
+	}
+
+	.panel-title {
+		margin-bottom: 18rpx;
+		font-size: 30rpx;
+		font-weight: 600;
+		color: #1f2937;
+	}
+
+	.field {
+		margin-bottom: 18rpx;
+	}
+
+	.label {
+		margin-bottom: 10rpx;
+		font-size: 24rpx;
+		color: #6b7280;
+	}
+
+	.input {
+		height: 72rpx;
+		padding-left: 20rpx;
+		padding-right: 20rpx;
+		border-radius: 12rpx;
+		background-color: #f8fafc;
+		border-width: 1rpx;
+		border-color: #dbe1ea;
+		color: #111827;
+	}
+
+	.button-row {
 		flex-direction: row;
 		align-items: center;
-		padding: 16rpx 0;
-		margin-bottom: 8rpx;
+		margin-top: 8rpx;
+		margin-bottom: 12rpx;
 	}
 
-	.info-label {
-		width: 200rpx;
-		color: #4a5568;
-		font-size: 15px;
-		font-weight: 600;
+	.action-btn {
+		margin-right: 16rpx;
+		padding-left: 24rpx;
+		padding-right: 24rpx;
+		border-radius: 12rpx;
+		background-color: #e8edf5;
+		color: #111827;
+		font-size: 28rpx;
 	}
 
-	.info-value {
-		flex: 1;
-		color: #666;
-		font-size: 15px;
+	.action-primary {
+		background-color: #2563eb;
+		color: #ffffff;
 	}
 
-	.status-disconnect {
-		color: #ed8936;
+	.state-text {
+		font-size: 24rpx;
 	}
 
-	.status-connected {
-		color: #38a169;
+	.state-on {
+		color: #16a34a;
 	}
 
-	.switch-container {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
+	.state-off {
+		color: #9ca3af;
+	}
+
+	.nav-btn {
+		margin-bottom: 16rpx;
+		padding-left: 24rpx;
+		padding-right: 24rpx;
+		border-radius: 12rpx;
+		background-color: #f8fafc;
+		color: #111827;
+		font-size: 28rpx;
+	}
+
+	.result-panel {
+		margin-bottom: 48rpx;
+	}
+
+	.listener-box {
 		width: 100%;
+		height: 240rpx;
+		margin-top: 12rpx;
+		padding: 18rpx;
+		border-radius: 12rpx;
+		background-color: #f8fafc;
+		border-width: 1rpx;
+		border-color: #dbe1ea;
+		color: #111827;
+		font-size: 24rpx;
+		line-height: 34rpx;
 	}
 
-	.info-input {
-		flex: 1;
-		height: 88rpx;
-		border-width: 1px;
-		border-color: #e2e8f0;
-		border-style: solid;
-		border-radius: 10px;
-		padding: 0 24rpx;
-		font-size: 15px;
-		background-color: #f7fafc;
-		color: #2d3748;
-	}
-
-	.button-group {
-		display: flex;
-		flex-direction: row;
-		justify-content: flex-end;
-		margin: 28rpx 0;
-	}
-
-	.btn {
-		flex: 1 1 0;
-		font-size: 15px;
-		height: 84rpx;
-		line-height: 84rpx;
-		border-radius: 10px;
-		margin-left: 20rpx;
-		padding: 0;
-		color: white;
-		text-align: center;
-	}
-
-	.btn-connect {
-		background-color: #2b66ff;
-	}
-
-	.btn-destroy {
-		background-color: #c62828;
-	}
-
-	.btn-clear {
-		background-color: #795548;
-	}
-
-	.btn-send-message {
-		background-color: #1976d2;
-	}
-
-	.btn-disabled {
-		background-color: #b0bec5;
-		color: #eef3f6;
-	}
-
-	.upload-status {
-		display: flex;
-		flex-direction: column;
-		margin-top: 16rpx;
-		padding: 24rpx;
-		border-radius: 10px;
-		background-color: #eef5ff;
-		border-left-width: 6px;
-		border-left-color: #2b66ff;
-		border-left-style: solid;
-		color: #1f3a5f;
-	}
-
-	.upload-status-title {
-		font-size: 15px;
-		font-weight: 600;
-		margin-bottom: 8rpx;
-	}
-
-	.upload-status-text {
-		font-size: 13px;
-		color: #4a5568;
+	.result-box {
+		width: 100%;
+		height: 360rpx;
+		padding: 18rpx;
+		border-radius: 12rpx;
+		background-color: #f8fafc;
+		border-width: 1rpx;
+		border-color: #dbe1ea;
+		color: #111827;
+		font-size: 24rpx;
+		line-height: 34rpx;
 	}
 </style>

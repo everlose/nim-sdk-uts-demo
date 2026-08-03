@@ -1,0 +1,184 @@
+<template>
+	<scroll-view class="page" scroll-y="true">
+		<view class="panel">
+			<text class="title">消息</text>
+			<text class="sub-title">只保留查询消息、创建文本消息、发送消息、消息监听。</text>
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">参数</text>
+			<view class="field">
+				<text class="label">会话 ID</text>
+				<input class="input" :value="conversationId" @input="onConversationIdInput" />
+			</view>
+			<view class="field">
+				<text class="label">文本内容</text>
+				<input class="input" :value="text" @input="onTextInput" />
+			</view>
+			<view class="field">
+				<text class="label">查询条数</text>
+				<input class="input" :value="limitText" @input="onLimitInput" />
+			</view>
+			<view class="field">
+				<text class="label">监听状态</text>
+				<text class="state-text" :class="listenerEnabled ? 'state-on' : 'state-off'">
+					{{ listenerEnabled ? '已开启' : '未开启' }}
+				</text>
+			</view>
+			<textarea class="listener-box" :value="listenerText" disabled />
+		</view>
+
+		<view class="panel">
+			<text class="panel-title">接口</text>
+			<button class="action-btn action-primary" @tap="handleQueryMessages">查询消息</button>
+			<button class="action-btn action-primary" @tap="handleCreateTextMessage">创建文本消息</button>
+			<button class="action-btn action-primary" @tap="handleSendMessage">发送消息</button>
+			<button class="action-btn" @tap="toggleListener">{{ listenerEnabled ? '关闭监听' : '开启监听' }}</button>
+		</view>
+
+		<view class="panel result-panel">
+			<text class="panel-title">结果</text>
+			<textarea class="result-box" :value="resultText" disabled />
+		</view>
+	</scroll-view>
+</template>
+
+<script lang="uts">
+	import {
+		V2NIMMessage,
+		V2NIMMessageCreate,
+		V2NIMMessageListener,
+		V2NIMMessageService
+	} from '@/uni_modules/nim-uts-sdk'
+	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
+
+	let messageService : V2NIMMessageService | null = null
+	let messageCreateService : V2NIMMessageCreate | null = null
+	let listenerEnabled = false
+	let createdMessage : V2NIMMessage | null = null
+	let messageListener : V2NIMMessageListener | null = null
+
+	export default {
+		data() {
+			return {
+				conversationId: '',
+				text: getStoredString('demo_message_text', 'hello demo'),
+				limitText: getStoredString('demo_message_limit', '20'),
+				listenerEnabled: listenerEnabled,
+				resultText: '暂无结果',
+				listenerText: '暂无监听内容'
+			}
+		},
+		methods: {
+			ensureService() : V2NIMMessageService {
+				if (messageService == null) {
+					messageService = new V2NIMMessageService()
+				}
+				return messageService!
+			},
+			ensureCreator() : V2NIMMessageCreate {
+				if (messageCreateService == null) {
+					messageCreateService = new V2NIMMessageCreate()
+				}
+				return messageCreateService!
+			},
+			getLimit() : number {
+				const value = parseInt(this.limitText)
+				if (isNaN(value)) {
+					return 20
+				}
+				return value
+			},
+			onConversationIdInput(e : InputEvent) { this.conversationId = e.detail.value },
+			onTextInput(e : InputEvent) { this.text = e.detail.value },
+			onLimitInput(e : InputEvent) { this.limitText = e.detail.value },
+			printResult(title : string, payloadText : string) {
+				this.resultText = title + '\n' + payloadText
+				console.log(title, payloadText)
+			},
+			appendEvent(title : string, payloadText : string) {
+				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
+				console.log(title, payloadText)
+			},
+			handleQueryMessages() {
+				this.ensureService().getMessageList({
+					conversationId: this.conversationId,
+					limit: this.getLimit()
+				}).then((res) => {
+					this.printResult('getMessageList', JSON.stringify(res))
+					if (res.code == 200 && res.data != null && res.data!.length > 0) {
+						this.conversationId = res.data![0].conversationId
+						setStoredString('demo_message_conversationId', this.conversationId)
+					}
+					uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
+				})
+			},
+			handleCreateTextMessage() {
+				setStoredString('demo_message_text', this.text)
+				createdMessage = this.ensureCreator().createTextMessage(this.text)
+				this.printResult('createTextMessage', JSON.stringify(createdMessage))
+				uni.showToast({ title: createdMessage != null ? '创建成功' : '创建失败', icon: 'none' })
+			},
+			handleSendMessage() {
+				const message = createdMessage
+				if (message == null) {
+					uni.showToast({ title: '请先创建文本消息', icon: 'none' })
+					return
+				}
+				this.ensureService().sendMessage(message, this.conversationId, null, null).then((res) => {
+					this.printResult('sendMessage', JSON.stringify(res))
+					uni.showToast({ title: res.code == 200 ? '发送成功' : '发送失败', icon: 'none' })
+				})
+			},
+			toggleListener() {
+				const service = this.ensureService()
+				if (listenerEnabled) {
+					if (messageListener != null) {
+						service.removeMessageListener(messageListener!)
+					}
+					messageListener = null
+					listenerEnabled = false
+				} else {
+					const self = this
+					messageListener = {
+						onReceiveMessages(messages) {
+							if (messages.length > 0) {
+								self.conversationId = messages[0].conversationId
+								setStoredString('demo_message_conversationId', self.conversationId)
+							}
+							self.appendEvent('onReceiveMessages', JSON.stringify(messages))
+						},
+						onReceiveMessagesModified(messages) { self.appendEvent('onReceiveMessagesModified', JSON.stringify(messages)) },
+						onSendMessage(message) { self.appendEvent('onSendMessage', JSON.stringify(message)) },
+						onMessageRevokeNotifications(notifications) { self.appendEvent('onMessageRevokeNotifications', JSON.stringify(notifications)) },
+						onMessageDeletedNotifications(notifications) { self.appendEvent('onMessageDeletedNotifications', JSON.stringify(notifications)) },
+						onReceiveP2PMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveP2PMessageReadReceipts', JSON.stringify(readReceipts)) },
+						onReceiveTeamMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveTeamMessageReadReceipts', JSON.stringify(readReceipts)) }
+					} as V2NIMMessageListener
+					service.addMessageListener(messageListener!)
+					listenerEnabled = true
+				}
+				this.listenerEnabled = listenerEnabled
+			}
+		}
+	}
+</script>
+
+<style>
+	.page { flex: 1; padding: 24rpx; background-color: #f5f7fb; }
+	.panel { margin-bottom: 24rpx; padding: 24rpx; border-radius: 16rpx; background-color: #ffffff; border-width: 1rpx; border-color: #e5e8ef; }
+	.title { font-size: 38rpx; font-weight: 600; color: #111827; }
+	.sub-title { margin-top: 12rpx; font-size: 26rpx; color: #6b7280; }
+	.panel-title { margin-bottom: 18rpx; font-size: 30rpx; font-weight: 600; color: #1f2937; }
+	.field { margin-bottom: 18rpx; }
+	.label { margin-bottom: 10rpx; font-size: 24rpx; color: #6b7280; }
+	.input { height: 72rpx; padding-left: 20rpx; padding-right: 20rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; }
+	.action-btn { margin-bottom: 16rpx; border-radius: 12rpx; background-color: #f8fafc; color: #111827; font-size: 28rpx; }
+	.action-primary { background-color: #2563eb; color: #ffffff; }
+	.state-text { font-size: 24rpx; }
+	.state-on { color: #16a34a; }
+	.state-off { color: #9ca3af; }
+	.result-panel { margin-bottom: 48rpx; }
+	.listener-box { width: 100%; height: 240rpx; margin-top: 12rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+	.result-box { width: 100%; height: 360rpx; padding: 18rpx; border-radius: 12rpx; background-color: #f8fafc; border-width: 1rpx; border-color: #dbe1ea; color: #111827; font-size: 24rpx; line-height: 34rpx; }
+</style>
