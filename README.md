@@ -4,10 +4,11 @@
 
 ## 功能
 
-- 初始化 `nim-uts-sdk` 并登录
-- 发送文本 / 图片 / 语音 / 视频 / 文件消息
-- 附件上传进度显示与取消上传
-- 登录态、连接状态监听
+- 初始化 `nim-uts-sdk`
+- 登录 / 登出 / 登录状态监听
+- 用户、好友、本地会话、消息、群 5 个常用模块接口测试
+- 页面底部展示接口调用和查询返回结果
+- 页面顶部监听状态区域展示监听回调内容
 
 ## 开发者首次配置
 
@@ -21,20 +22,41 @@
 
 ### 1. 云信账号信息（必填）
 
-打开 `pages/index/index.uvue`，页面首屏有几个输入框，默认值是带 `*` 的占位串（**不可直接用于登录**）：
+打开 `pages/index/index.uvue`，修改 `DEMO_LOGIN_CONFIG`。其他使用者只需要改这里的 `appKey / accountId / token`：
 
-| 输入框 | 默认占位 | 说明 |
-| --- | --- | --- |
-| appkey | `b94d****a720f` | 在[云信控制台](https://app.netease.im/)创建应用后获取 |
-| 账号ID | `YOUR_ACCID` | 测试账号的 accid |
-| 账号Token | `e10adc****f883e` | 对应 accid 的 token |
-| 会话ID | `YOUR_ACCID\|1\|TARGET_ACCID` | 目标会话 ID，格式 `类型\|目标类型\|目标账号` |
+```uts
+const DEMO_LOGIN_CONFIG : DemoLoginConfig = {
+	appKey: 'your yunxin appKey',
+	accountId: 'login account id',
+	token: 'login token'
+}
+```
 
-填入真实值后点"登录"，**登录成功**才会把 appkey/token/accountId 写入本地存储；下次启动自动回填，无需重复输入。
+| 字段 | 说明 |
+| --- | --- |
+| `appKey` | 在[云信控制台](https://app.netease.im/)创建应用后获取 |
+| `accountId` | 测试账号的 accid |
+| `token` | 对应 accid 的 token |
 
-> 本仓库不会把真实 appkey/token 提交进 git——它们只存在你本机的 `uni.getStorageSync` 里。
+首页已拆成“初始化”和“登录”两块：先点击“初始化”，成功后再点击“登录”。页面输入框仍可临时修改配置。
 
-### 2. 鸿蒙运行配置（鸿蒙端必填）
+> iOS uni-app-x 当前同步 Storage 桥接存在返回 `undefined` 抛错问题，Demo 在 iOS 下会跳过本地缓存写入。Android / Harmony 仍会通过 `uni.setStorageSync` 保存页面输入值。
+
+### 2. 模块测试说明
+
+登录成功后，可以从首页进入以下模块：
+
+| 模块 | 说明 |
+| --- | --- |
+| 用户 | 获取用户列表、云端获取用户、搜索用户、更新自己资料、用户监听 |
+| 好友 | 获取好友列表、按账号获取好友、添加好友、删除好友、好友监听 |
+| 本地会话 | 获取会话列表、创建会话、删除会话、置顶会话、本地会话监听 |
+| 消息 | 查询消息、创建文本消息、发送消息、消息监听 |
+| 群 | 创建群、获取已加入群列表、获取群资料、获取群成员列表、群监听 |
+
+列表类接口拉取成功后，会自动把第一条数据回填到后续操作使用的输入框。例如本地会话页获取会话列表后，会把第一条 `conversationId` 填入“会话 ID”，后续可以直接点击置顶或删除。
+
+### 3. 鸿蒙运行配置（鸿蒙端必填）
 
 `manifest.json` 的 `app-harmony.distribute.signingConfigs` 字段值已留空，需要本机生成：
 
@@ -43,7 +65,7 @@
 3. `compatibleSdkVersion` 保持 `"5.0.5(17)"`：云信鸿蒙 SDK `@nimsdk/nim` 要求 `minCompatibleSdkVersion = 17`，低于 17 会报 `00306004 Specification Limit Violation`。
 4. `bundleName` 默认 `uni.app.UNI1997414`，如需改成自己的包名，同时要在 AGC 控制台匹配对应证书。
 
-### 3. Android / iOS
+### 4. Android / iOS
 
 - Android：`manifest.json` 的 `app-android` 段用默认配置即可，无需额外证书（debug keystore 由 HBuilderX 自动管理）。
 - iOS：首次运行需在 HBuilderX 里配置开发者证书 / profile。
@@ -64,7 +86,13 @@ rm -rf unpackage/dist/dev/app-harmony
 
 ```
 .
-├── pages/index/index.uvue        # 演示页：初始化 + 登录 + 收发消息
+├── pages/index/index.uvue        # 首页：默认配置 + 初始化 + 登录 + 模块入口
+├── pages/common/demo-utils.uts   # Demo 公共工具：输入框缓存封装
+├── pages/user/user.uvue          # 用户模块常用接口
+├── pages/friend/friend.uvue      # 好友模块常用接口
+├── pages/local-conversation/     # 本地会话模块常用接口
+├── pages/message/message.uvue    # 消息模块常用接口
+├── pages/team/team.uvue          # 群模块常用接口
 ├── uni_modules/nim-uts-sdk/      # 云信 IM UTS 插件（已被 .gitignore 忽略，见上方"安装 nim-uts-sdk 插件"）
 │   ├── utssdk/
 │   │   ├── app-android/          # Android 桥接
@@ -73,9 +101,7 @@ rm -rf unpackage/dist/dev/app-harmony
 │   │   ├── index.d.ts            # 类型声明
 │   │   └── interface.uts         # 跨端接口
 │   └── readme.md                 # 插件使用说明（初始化/服务清单/命名差异）
-├── manifest.json                 # 工程配置（签名信息需本机生成）
-└── debug/                        # 本机调试备忘（已被 .gitignore 忽略，勿提交）
-    └── harmony.md                # 鸿蒙真实运行配置 + 测试账号真值
+└── manifest.json                 # 工程配置（签名信息需本机生成）
 ```
 
 ## 进一步文档
