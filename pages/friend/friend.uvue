@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">好友</text>
 			<text class="sub-title">保留 5 个常用接口。</text>
@@ -50,26 +50,26 @@
 
 <script lang="uts">
 	import {
+		V2NIMFriendAddMode,
 		V2NIMFriendListener,
 		V2NIMFriendService
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
-	const FRIEND_ADD_MODE_APPLY = 2
 	let friendService : V2NIMFriendService | null = null
-	let listenerEnabled = false
+	let listenerEnabled : boolean = false
 	let friendListener : V2NIMFriendListener | null = null
 
 	export default {
 		data() {
 			return {
-				accountId: '',
-				accountIdsText: '',
-				keyword: getStoredString('demo_friend_keyword', '332103'),
-				postscript: getStoredString('demo_friend_postscript', 'hi'),
-				listenerEnabled: listenerEnabled,
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				accountId: '' as string,
+				accountIdsText: '' as string,
+				keyword: getStoredString('demo_friend_keyword', '332103') as string,
+				postscript: getStoredString('demo_friend_postscript', 'hi') as string,
+				listenerEnabled: listenerEnabled as boolean,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -129,7 +129,7 @@
 			handleAddFriend() {
 				setStoredString('demo_friend_postscript', this.postscript)
 				this.ensureService().addFriend(this.accountId, {
-					addMode: FRIEND_ADD_MODE_APPLY,
+					addMode: V2NIMFriendAddMode.V2NIM_FRIEND_MODE_TYPE_APPLY,
 					postscript: this.postscript
 				}).then((res) => {
 					this.printResult('addFriend', JSON.stringify(res))
@@ -154,7 +154,7 @@
 					listenerEnabled = false
 				} else {
 					const self = this
-					friendListener = {
+					const listener : V2NIMFriendListener = {
 						onFriendAdded(friendInfo) { self.appendEvent('onFriendAdded', JSON.stringify(friendInfo)) },
 						onFriendDeleted(accountId, deletionType) {
 							self.appendEvent('onFriendDeleted', JSON.stringify({ accountId: accountId, deletionType: deletionType }))
@@ -162,8 +162,9 @@
 						onFriendAddApplication(applicationInfo) { self.appendEvent('onFriendAddApplication', JSON.stringify(applicationInfo)) },
 						onFriendAddRejected(rejectionInfo) { self.appendEvent('onFriendAddRejected', JSON.stringify(rejectionInfo)) },
 						onFriendInfoChanged(friendInfo) { self.appendEvent('onFriendInfoChanged', JSON.stringify(friendInfo)) }
-					} as V2NIMFriendListener
-					service.addFriendListener(friendListener!)
+					}
+					friendListener = listener
+					service.addFriendListener(listener)
 					listenerEnabled = true
 				}
 				this.listenerEnabled = listenerEnabled

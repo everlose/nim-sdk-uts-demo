@@ -18,7 +18,7 @@
 
 本仓库已将 `uni_modules/nim-uts-sdk` 加入 `.gitignore`，克隆后工程里**没有这个插件**，需自行安装：
 
-在 HBuilderX 中打开本工程 → 右键 `uni_modules` → "从插件市场导入" → 搜索 `nim-uts-sdk` 安装；或直接访问 [DCloud 插件市场 nim-uts-sdk](https://ext.dcloud.net.cn/plugin?name=nim-uts-sdk) 导入到本工程。
+直接访问 [DCloud 插件市场 nim-uts-sdk](https://ext.dcloud.net.cn/plugin?name=nim-uts-sdk) 导入到本工程。
 
 ### 1. 云信账号信息（必填）
 

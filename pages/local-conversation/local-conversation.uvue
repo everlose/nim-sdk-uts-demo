@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">本地会话</text>
 			<text class="sub-title">保留 5 个常用接口。</text>
@@ -48,17 +48,17 @@
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
 	let localConversationService : V2NIMLocalConversationService | null = null
-	let listenerEnabled = false
+	let listenerEnabled : boolean = false
 	let localConversationListener : V2NIMLocalConversationListener | null = null
 
 	export default {
 		data() {
 			return {
-				conversationId: '',
-				limitText: getStoredString('demo_local_limit', '20'),
-				listenerEnabled: listenerEnabled,
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				conversationId: '' as string,
+				limitText: getStoredString('demo_local_limit', '20') as string,
+				listenerEnabled: listenerEnabled as boolean,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -124,7 +124,7 @@
 					listenerEnabled = false
 				} else {
 					const self = this
-					localConversationListener = {
+					const listener : V2NIMLocalConversationListener = {
 						onSyncStarted() { self.appendEvent('onSyncStarted', 'started') },
 						onSyncFinished() { self.appendEvent('onSyncFinished', 'finished') },
 						onSyncFailed(error) { self.appendEvent('onSyncFailed', JSON.stringify(error)) },
@@ -138,8 +138,9 @@
 						onUnreadCountChangedByFilter(filter, unreadCount) {
 							self.appendEvent('onUnreadCountChangedByFilter', JSON.stringify({ filter: filter, unreadCount: unreadCount }))
 						}
-					} as V2NIMLocalConversationListener
-					service.addConversationListener(localConversationListener!)
+					}
+					localConversationListener = listener
+					service.addConversationListener(listener)
 					listenerEnabled = true
 				}
 				this.listenerEnabled = listenerEnabled

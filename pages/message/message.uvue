@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">消息</text>
 			<text class="sub-title">只保留查询消息、创建文本消息、发送消息、消息监听。</text>
@@ -54,19 +54,19 @@
 
 	let messageService : V2NIMMessageService | null = null
 	let messageCreateService : V2NIMMessageCreate | null = null
-	let listenerEnabled = false
+	let listenerEnabled : boolean = false
 	let createdMessage : V2NIMMessage | null = null
 	let messageListener : V2NIMMessageListener | null = null
 
 	export default {
 		data() {
 			return {
-				conversationId: '',
-				text: getStoredString('demo_message_text', 'hello demo'),
-				limitText: getStoredString('demo_message_limit', '20'),
-				listenerEnabled: listenerEnabled,
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				conversationId: '' as string,
+				text: getStoredString('demo_message_text', 'hello demo') as string,
+				limitText: getStoredString('demo_message_limit', '20') as string,
+				listenerEnabled: listenerEnabled as boolean,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -140,7 +140,7 @@
 					listenerEnabled = false
 				} else {
 					const self = this
-					messageListener = {
+					const listener : V2NIMMessageListener = {
 						onReceiveMessages(messages) {
 							if (messages.length > 0) {
 								self.conversationId = messages[0].conversationId
@@ -154,8 +154,9 @@
 						onMessageDeletedNotifications(notifications) { self.appendEvent('onMessageDeletedNotifications', JSON.stringify(notifications)) },
 						onReceiveP2PMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveP2PMessageReadReceipts', JSON.stringify(readReceipts)) },
 						onReceiveTeamMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveTeamMessageReadReceipts', JSON.stringify(readReceipts)) }
-					} as V2NIMMessageListener
-					service.addMessageListener(messageListener!)
+					}
+					messageListener = listener
+					service.addMessageListener(listener)
 					listenerEnabled = true
 				}
 				this.listenerEnabled = listenerEnabled

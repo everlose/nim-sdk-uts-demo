@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">群</text>
 			<text class="sub-title">保留 5 个常用接口。</text>
@@ -47,30 +47,24 @@
 <script lang="uts">
 	import {
 		V2NIMTeamListener,
-		V2NIMTeamService
+		V2NIMTeamService,
+		V2NIMTeamType
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
-	const TEAM_TYPE_NORMAL = 1
-	const TEAM_JOIN_MODE_FREE = 1
-	const TEAM_INVITE_MODE_ALL = 0
-	const TEAM_AGREE_MODE_NO_AUTH = 1
-	const TEAM_UPDATE_INFO_MODE_ALL = 0
-	const TEAM_UPDATE_EXTENSION_MODE_ALL = 0
-	const TEAM_MEMBER_ROLE_QUERY_TYPE_ALL = 0
 	let teamService : V2NIMTeamService | null = null
-	let listenerEnabled = false
+	let listenerEnabled : boolean = false
 	let teamListener : V2NIMTeamListener | null = null
 
 	export default {
 		data() {
 			return {
-				teamId: '',
-				name: getStoredString('demo_team_name', 'demo team'),
-				memberAccountId: '',
-				listenerEnabled: listenerEnabled,
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				teamId: '' as string,
+				name: getStoredString('demo_team_name', 'demo team') as string,
+				memberAccountId: '' as string,
+				listenerEnabled: listenerEnabled as boolean,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -95,18 +89,13 @@
 				setStoredString('demo_team_teamId', this.teamId)
 				setStoredString('demo_team_name', this.name)
 				this.ensureService().createTeam({
-					teamType: TEAM_TYPE_NORMAL,
+					teamType: V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL,
 					name: this.name,
 					avatar: '',
 					intro: 'demo intro',
 					announcement: 'demo announcement',
 					serverExtension: '{}',
-					memberLimit: 100,
-					joinMode: TEAM_JOIN_MODE_FREE,
-					inviteMode: TEAM_INVITE_MODE_ALL,
-					agreeMode: TEAM_AGREE_MODE_NO_AUTH,
-					updateInfoMode: TEAM_UPDATE_INFO_MODE_ALL,
-					updateExtensionMode: TEAM_UPDATE_EXTENSION_MODE_ALL
+					memberLimit: 100
 				}, null, null, null).then((res) => {
 					this.printResult('createTeam', JSON.stringify(res))
 					if (res.code == 200 && res.data != null && res.data!.team != null) {
@@ -129,16 +118,15 @@
 				})
 			},
 			handleGetTeamInfo() {
-				this.ensureService().getTeamInfo(this.teamId, TEAM_TYPE_NORMAL).then((res) => {
+				this.ensureService().getTeamInfo(this.teamId, V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL).then((res) => {
 					this.printResult('getTeamInfo', JSON.stringify(res))
 					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
 				})
 			},
 			handleGetTeamMemberList() {
-				this.ensureService().getTeamMemberList(this.teamId, TEAM_TYPE_NORMAL, {
+				this.ensureService().getTeamMemberList(this.teamId, V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL, {
 					limit: 20,
 					onlyChatBanned: false,
-					roleQueryType: TEAM_MEMBER_ROLE_QUERY_TYPE_ALL,
 					nextToken: ''
 				}).then((res) => {
 					this.printResult('getTeamMemberList', JSON.stringify(res))
@@ -159,7 +147,7 @@
 					listenerEnabled = false
 				} else {
 					const self = this
-					teamListener = {
+					const listener : V2NIMTeamListener = {
 						onSyncStarted() { self.appendEvent('onSyncStarted', 'started') },
 						onSyncFinished() { self.appendEvent('onSyncFinished', 'finished') },
 						onSyncFailed(error) { self.appendEvent('onSyncFailed', JSON.stringify(error)) },
@@ -177,8 +165,9 @@
 						onTeamMemberLeft(teamMembers) { self.appendEvent('onTeamMemberLeft', JSON.stringify(teamMembers)) },
 						onTeamMemberInfoUpdated(teamMembers) { self.appendEvent('onTeamMemberInfoUpdated', JSON.stringify(teamMembers)) },
 						onReceiveTeamJoinActionInfo(joinActionInfo) { self.appendEvent('onReceiveTeamJoinActionInfo', JSON.stringify(joinActionInfo)) }
-					} as V2NIMTeamListener
-					service.addTeamListener(teamListener!)
+					}
+					teamListener = listener
+					service.addTeamListener(listener)
 					listenerEnabled = true
 				}
 				this.listenerEnabled = listenerEnabled

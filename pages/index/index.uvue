@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">nim-uts-sdk Demo</text>
 			<text class="sub-title">初始化和登录分开操作，下面进入各模块测试页。</text>
@@ -59,7 +59,9 @@
 	import {
 		initNIMSDK,
 		SDKOptions,
+		V2NIMDataSyncLevel,
 		V2NIMLoginListener,
+		V2NIMLoginStatus,
 		V2NIMLoginService
 	} from '@/uni_modules/nim-uts-sdk'
 	// #ifdef APP-ANDROID
@@ -69,10 +71,6 @@
 	import { HarmonySDKOptions } from '@/uni_modules/nim-uts-sdk'
 	// #endif
 	import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from '../common/demo-utils.uts'
-
-	const LOGIN_STATUS_LOGINED = 1
-	const LOGIN_STATUS_LOGINING = 2
-	const DATA_SYNC_LEVEL_FULL = 0
 
 	type DemoLoginConfig = {
 		appKey : string,
@@ -93,13 +91,13 @@
 	export default {
 		data() {
 			return {
-				appkey: getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey),
-				accountId: getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId),
-				token: getStoredString('demo_token', DEMO_LOGIN_CONFIG.token),
-				initialized: getStoredBoolean('demo_initialized', false),
-				loginStatus: 'logout',
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				appkey: getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey) as string,
+				accountId: getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId) as string,
+				token: getStoredString('demo_token', DEMO_LOGIN_CONFIG.token) as string,
+				initialized: getStoredBoolean('demo_initialized', false) as boolean,
+				loginStatus: 'logout' as string,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -139,13 +137,14 @@
 			},
 			ensureLoginService() {
 				if (loginService == null) {
-					loginService = new V2NIMLoginService()
+					const service = new V2NIMLoginService()
+					loginService = service
 					const self = this
-					loginService.addLoginListener({
+					const listener : V2NIMLoginListener = {
 						onLoginStatus(status) {
-							if (status == LOGIN_STATUS_LOGINED) {
+							if (status == V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINED) {
 								self.loginStatus = 'logined'
-							} else if (status == LOGIN_STATUS_LOGINING) {
+							} else if (status == V2NIMLoginStatus.V2NIM_LOGIN_STATUS_LOGINING) {
 								self.loginStatus = 'logining'
 							} else {
 								self.loginStatus = 'logout'
@@ -155,7 +154,8 @@
 						onLoginFailed(error) {
 							self.appendEvent('onLoginFailed', JSON.stringify(error))
 						}
-					} as V2NIMLoginListener)
+					}
+					service.addLoginListener(listener)
 				}
 			},
 			handleInit() {
@@ -181,7 +181,7 @@
 				}
 				this.ensureLoginService()
 				loginService!.login(this.accountId, this.token, {
-					syncLevel: DATA_SYNC_LEVEL_FULL
+					syncLevel: V2NIMDataSyncLevel.V2NIM_DATA_SYNC_TYPE_LEVEL_FULL
 				}).then((res) => {
 					if (res.code == 200) {
 						this.loginStatus = 'logined'
@@ -195,11 +195,12 @@
 				})
 			},
 			handleLogout() {
-				if (loginService == null) {
+				const service = loginService
+				if (service == null) {
 					uni.showToast({ title: '请先登录', icon: 'none' })
 					return
 				}
-				loginService.logout().then((res) => {
+				service.logout().then((res) => {
 					if (res.code == 200) {
 						this.loginStatus = 'logout'
 						uni.showToast({ title: '已登出', icon: 'success' })

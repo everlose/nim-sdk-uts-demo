@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">用户</text>
 			<text class="sub-title">保留 5 个常用接口。</text>
@@ -56,19 +56,19 @@
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
 	let userService : V2NIMUserService | null = null
-	let listenerEnabled = false
+	let listenerEnabled : boolean = false
 	let userListener : V2NIMUserListener | null = null
 
 	export default {
 		data() {
 			return {
-				accountIdsText: '',
-				keyword: getStoredString('demo_user_keyword', '332103'),
-				name: getStoredString('demo_user_name', 'demo-name'),
-				sign: getStoredString('demo_user_sign', 'demo-sign'),
-				listenerEnabled: listenerEnabled,
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
+				accountIdsText: '' as string,
+				keyword: getStoredString('demo_user_keyword', '332103') as string,
+				name: getStoredString('demo_user_name', 'demo-name') as string,
+				sign: getStoredString('demo_user_sign', 'demo-sign') as string,
+				listenerEnabled: listenerEnabled as boolean,
+				resultText: '暂无结果' as string,
+				listenerText: '暂无监听内容' as string
 			}
 		},
 		methods: {
@@ -163,12 +163,13 @@
 					listenerEnabled = false
 				} else {
 					const self = this
-					userListener = {
+					const listener : V2NIMUserListener = {
 						onUserProfileChanged(users) { self.appendEvent('onUserProfileChanged', JSON.stringify(users)) },
 						onBlockListAdded(user) { self.appendEvent('onBlockListAdded', JSON.stringify(user)) },
 						onBlockListRemoved(accountId) { self.appendEvent('onBlockListRemoved', JSON.stringify(accountId)) }
-					} as V2NIMUserListener
-					service.addUserListener(userListener!)
+					}
+					userListener = listener
+					service.addUserListener(listener)
 					listenerEnabled = true
 				}
 				this.listenerEnabled = listenerEnabled
