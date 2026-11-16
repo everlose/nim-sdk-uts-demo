@@ -1,5 +1,5 @@
 <template>
-	<scroll-view class="page" scroll-y="true">
+	<scroll-view class="page" :scroll-y="true">
 		<view class="panel">
 			<text class="title">nim-uts-sdk Demo</text>
 			<text class="sub-title">初始化和登录分开操作，下面进入各模块测试页。</text>
@@ -55,24 +55,26 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
 		initNIMSDK,
-		SDKOptions,
+		NIMFail,
+		NIMInitSuccess,
 		V2NIMLoginListener,
 		V2NIMLoginService
 	} from '@/uni_modules/nim-uts-sdk'
+	// 蒸汽模式（Android）下使用插件的扁平/JSON 入口，避免类实例跨桥。
+	// TODO(iOS/Harmony/Web): 补齐 initNIMSDKJson 后，删除这里的平台导入差异。
 	// #ifdef APP-ANDROID
-	import { AndroidSDKOptions } from '@/uni_modules/nim-uts-sdk'
+	import { initNIMSDKJson } from '@/uni_modules/nim-uts-sdk'
+	// #endif
+	// #ifndef APP-ANDROID
+	import { SDKOptions } from '@/uni_modules/nim-uts-sdk'
 	// #endif
 	// #ifdef APP-HARMONY
 	import { HarmonySDKOptions } from '@/uni_modules/nim-uts-sdk'
 	// #endif
 	import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from '../common/demo-utils.uts'
-
-	const LOGIN_STATUS_LOGINED = 1
-	const LOGIN_STATUS_LOGINING = 2
-	const DATA_SYNC_LEVEL_FULL = 0
 
 	type DemoLoginConfig = {
 		appKey : string,
@@ -83,136 +85,162 @@
 	// Demo 默认登录信息。其他使用者只需要修改这里的 appKey、accountId、token。
 	// 页面输入框仍会优先读取本地缓存；如果想恢复这里的默认值，可清理应用缓存后重新打开 Demo。
 	const DEMO_LOGIN_CONFIG : DemoLoginConfig = {
-		appKey: 'your yunxin appKey',
-		accountId: 'login account id',
-		token: 'login token'
+		appKey: '3e215d27b6a6a9e27dad7ef36dd5b65c',
+		accountId: '334665458163968',
+		token: '8d5ca2c8-9c02-481c-9908-ca1e96038788'
 	}
+
+	const appkey = ref(getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey) as string)
+	const accountId = ref(getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId) as string)
+	const token = ref(getStoredString('demo_token', DEMO_LOGIN_CONFIG.token) as string)
+	const initialized = ref(getStoredBoolean('demo_initialized', false) as boolean)
+	const loginStatus = ref('logout' as string)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
 
 	let loginService : V2NIMLoginService | null = null
 
-	export default {
-		data() {
-			return {
-				appkey: getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey),
-				accountId: getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId),
-				token: getStoredString('demo_token', DEMO_LOGIN_CONFIG.token),
-				initialized: getStoredBoolean('demo_initialized', false),
-				loginStatus: 'logout',
-				resultText: '暂无结果',
-				listenerText: '暂无监听内容'
-			}
-		},
-		methods: {
-			onAppkeyInput(e : InputEvent) {
-				this.appkey = e.detail.value
-			},
-			onAccountIdInput(e : InputEvent) {
-				this.accountId = e.detail.value
-			},
-			onTokenInput(e : InputEvent) {
-				this.token = e.detail.value
-			},
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			buildOptions() : SDKOptions {
-				let options : SDKOptions
-				// #ifdef APP-ANDROID
-				const androidOptions = new AndroidSDKOptions()
-				androidOptions.appKey = this.appkey
-				options = androidOptions
-				// #endif
-				// #ifdef APP-HARMONY
-				const harmonyOptions = new HarmonySDKOptions()
-				harmonyOptions.appKey = this.appkey
-				options = harmonyOptions
-				// #endif
-				// #ifdef APP-IOS
-				options = { appKey: this.appkey } as SDKOptions
-				// #endif
-				return options
-			},
-			ensureLoginService() {
-				if (loginService == null) {
-					loginService = new V2NIMLoginService()
-					const self = this
-					loginService.addLoginListener({
-						onLoginStatus(status) {
-							if (status == LOGIN_STATUS_LOGINED) {
-								self.loginStatus = 'logined'
-							} else if (status == LOGIN_STATUS_LOGINING) {
-								self.loginStatus = 'logining'
-							} else {
-								self.loginStatus = 'logout'
-							}
-							self.appendEvent('onLoginStatus', JSON.stringify(status))
-						},
-						onLoginFailed(error) {
-							self.appendEvent('onLoginFailed', JSON.stringify(error))
-						}
-					} as V2NIMLoginListener)
-				}
-			},
-			handleInit() {
-				initNIMSDK({
-					options: this.buildOptions(),
-					success: (res) => {
-						this.initialized = true
-						setStoredBoolean('demo_initialized', true)
-						setStoredString('demo_appkey', this.appkey)
-						this.printResult('initNIMSDK success', JSON.stringify(res))
-						uni.showToast({ title: '初始化成功', icon: 'success' })
-					},
-					fail: (err) => {
-						this.printResult('initNIMSDK fail', JSON.stringify(err))
-						uni.showToast({ title: '初始化失败', icon: 'none' })
-					}
-				})
-			},
-			handleLogin() {
-				if (!this.initialized) {
-					uni.showToast({ title: '请先初始化', icon: 'none' })
-					return
-				}
-				this.ensureLoginService()
-				loginService!.login(this.accountId, this.token, {
-					syncLevel: DATA_SYNC_LEVEL_FULL
-				}).then((res) => {
-					if (res.code == 200) {
-						this.loginStatus = 'logined'
-						setStoredString('demo_accountId', this.accountId)
-						setStoredString('demo_token', this.token)
-						uni.showToast({ title: '登录成功', icon: 'success' })
+	// 蒸汽模式下页面逻辑层是 JS：插件不再导出枚举对象，入参枚举一律用数字（与插件 Android 层约定），
+	// 数值取自 utssdk/types/Enum.uts。
+	const LOGIN_STATUS_LOGINED : number = 1
+	const LOGIN_STATUS_LOGINING : number = 2
+	const DATA_SYNC_LEVEL_FULL : number = 0
+
+	const onAppkeyInput = (e : InputEvent) => {
+		appkey.value = e.detail.value
+	}
+
+	const onAccountIdInput = (e : InputEvent) => {
+		accountId.value = e.detail.value
+	}
+
+	const onTokenInput = (e : InputEvent) => {
+		token.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	// 非 Android 端仍使用 SDKOptions 入口；Android 蒸汽模式走 initNIMSDKJson。
+	// #ifndef APP-ANDROID
+	const buildOptions = () : SDKOptions => {
+		let options : SDKOptions
+		// #ifdef APP-HARMONY
+		const harmonyOptions = new HarmonySDKOptions()
+		harmonyOptions.appKey = appkey.value
+		options = harmonyOptions
+		// #endif
+		// #ifdef APP-IOS
+		options = { appKey: appkey.value } as SDKOptions
+		// #endif
+		return options
+	}
+	// #endif
+
+	const ensureLoginService = () => {
+		if (loginService == null) {
+			const service = new V2NIMLoginService()
+			loginService = service
+			const listener : V2NIMLoginListener = {
+				onLoginStatus(status) {
+					if (status == LOGIN_STATUS_LOGINED) {
+						loginStatus.value = 'logined'
+					} else if (status == LOGIN_STATUS_LOGINING) {
+						loginStatus.value = 'logining'
 					} else {
-						uni.showToast({ title: res.desc.length > 0 ? res.desc : '登录失败', icon: 'none' })
+						loginStatus.value = 'logout'
 					}
-					this.printResult('login', JSON.stringify(res))
-				})
-			},
-			handleLogout() {
-				if (loginService == null) {
-					uni.showToast({ title: '请先登录', icon: 'none' })
-					return
+					appendEvent('onLoginStatus', JSON.stringify(status))
+				},
+				onLoginFailed(error) {
+					appendEvent('onLoginFailed', JSON.stringify(error))
 				}
-				loginService.logout().then((res) => {
-					if (res.code == 200) {
-						this.loginStatus = 'logout'
-						uni.showToast({ title: '已登出', icon: 'success' })
-					} else {
-						uni.showToast({ title: res.desc.length > 0 ? res.desc : '登出失败', icon: 'none' })
-					}
-					this.printResult('logout', JSON.stringify(res))
-				})
-			},
-			goPage(url : string) {
-				uni.navigateTo({ url: url })
 			}
+			service.addLoginListener(listener)
 		}
+	}
+
+	const onInitSuccess = (res : NIMInitSuccess) => {
+		initialized.value = true
+		setStoredBoolean('demo_initialized', true)
+		setStoredString('demo_appkey', appkey.value)
+		printResult('initNIMSDK success', JSON.stringify(res))
+		uni.showToast({ title: '初始化成功', icon: 'success' })
+	}
+
+	const onInitFail = (err : NIMFail) => {
+		printResult('initNIMSDK fail', JSON.stringify(err))
+		uni.showToast({ title: '初始化失败', icon: 'none' })
+	}
+
+	const handleInit = () => {
+		// 蒸汽模式（页面逻辑层是 JS）下，嵌套在对象里的 SDKOptions 实例过桥会退化成 UTSJSONObject，
+		// 调 initNIMSDK({ options: ... }) 会抛 ClassCastException；
+		// Android 改用 initNIMSDKJson：options 与回调分参数传递，插件内部按字段构造 SDKOptions。
+		// TODO(iOS/Harmony/Web): 补齐 initNIMSDKJson，当前仅 Android 走扁平初始化入口。
+		// #ifdef APP-ANDROID
+		initNIMSDKJson({
+			appKey: appkey.value
+		} as UTSJSONObject, onInitSuccess, onInitFail, null)
+		// #endif
+		// #ifndef APP-ANDROID
+		initNIMSDK({
+			options: buildOptions(),
+			success: onInitSuccess,
+			fail: onInitFail
+		})
+		// #endif
+	}
+
+	const handleLogin = () => {
+		if (!initialized.value) {
+			uni.showToast({ title: '请先初始化', icon: 'none' })
+			return
+		}
+		ensureLoginService()
+		// SDK 撤回了 loginJson：Android 的 login 实现本身接收 UTSJSONObject 并解析数字枚举，
+		// 其它端继续传 typed option，这里统一传对象字面量即可。
+		loginService!.login(accountId.value, token.value, {
+			syncLevel: DATA_SYNC_LEVEL_FULL
+		}).then((res) => {
+			if (res.code == 200) {
+				loginStatus.value = 'logined'
+				setStoredString('demo_accountId', accountId.value)
+				setStoredString('demo_token', token.value)
+				uni.showToast({ title: '登录成功', icon: 'success' })
+			} else {
+				uni.showToast({ title: res.desc.length > 0 ? res.desc : '登录失败', icon: 'none' })
+			}
+			printResult('login', JSON.stringify(res))
+		})
+	}
+
+	const handleLogout = () => {
+		const service = loginService
+		if (service == null) {
+			uni.showToast({ title: '请先登录', icon: 'none' })
+			return
+		}
+		service.logout().then((res) => {
+			if (res.code == 200) {
+				loginStatus.value = 'logout'
+				uni.showToast({ title: '已登出', icon: 'success' })
+			} else {
+				uni.showToast({ title: res.desc.length > 0 ? res.desc : '登出失败', icon: 'none' })
+			}
+			printResult('logout', JSON.stringify(res))
+		})
+	}
+
+	const goPage = (url : string) => {
+		uni.navigateTo({ url: url })
 	}
 </script>
 
