@@ -69,7 +69,7 @@
 			"deviceTypes": [
 				"phone"
 			],
-			"compatibleSdkVersion": "5.0.5(17)",
+			"compatibleSdkVersion": "6.0.0(20)",
 			"bundleName": "uni.app.UNI1997414",
 			"signingConfigs": {
 				"default": {
