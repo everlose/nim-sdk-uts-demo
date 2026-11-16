@@ -43,7 +43,7 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
 		V2NIMMessage,
 		V2NIMMessageCreate,
@@ -52,115 +52,120 @@
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
+	const conversationId = ref('' as string)
+	const text = ref(getStoredString('demo_message_text', 'hello demo') as string)
+	const limitText = ref(getStoredString('demo_message_limit', '20') as string)
+	const listenerEnabled = ref(false as boolean)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
+
 	let messageService : V2NIMMessageService | null = null
-	let messageCreateService : V2NIMMessageCreate | null = null
-	let listenerEnabled : boolean = false
+	// SDK 的 sendMessage / getMessageList 现在接收 any，插件内部按 JSON 归一化，
+	// 因此页面仍保存 V2NIMMessage 实例即可，无需再区分 Android / 其它端。
 	let createdMessage : V2NIMMessage | null = null
 	let messageListener : V2NIMMessageListener | null = null
 
-	export default {
-		data() {
-			return {
-				conversationId: '' as string,
-				text: getStoredString('demo_message_text', 'hello demo') as string,
-				limitText: getStoredString('demo_message_limit', '20') as string,
-				listenerEnabled: listenerEnabled as boolean,
-				resultText: '暂无结果' as string,
-				listenerText: '暂无监听内容' as string
+	const ensureService = () : V2NIMMessageService => {
+		if (messageService == null) {
+			messageService = new V2NIMMessageService()
+		}
+		return messageService!
+	}
+
+	const getLimit = () : number => {
+		const value = parseInt(limitText.value)
+		if (isNaN(value)) {
+			return 20
+		}
+		return value
+	}
+
+	const onConversationIdInput = (e : InputEvent) => {
+		conversationId.value = e.detail.value
+	}
+
+	const onTextInput = (e : InputEvent) => {
+		text.value = e.detail.value
+	}
+
+	const onLimitInput = (e : InputEvent) => {
+		limitText.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	const handleQueryMessages = () => {
+		// getMessageList 的 option 可以是对象字面量，Android 侧插件会按 JSON 字段归一化。
+		ensureService().getMessageList({
+			conversationId: conversationId.value,
+			limit: getLimit()
+		}).then((res) => {
+			printResult('getMessageList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				conversationId.value = res.data![0].conversationId
+				setStoredString('demo_message_conversationId', conversationId.value)
 			}
-		},
-		methods: {
-			ensureService() : V2NIMMessageService {
-				if (messageService == null) {
-					messageService = new V2NIMMessageService()
-				}
-				return messageService!
-			},
-			ensureCreator() : V2NIMMessageCreate {
-				if (messageCreateService == null) {
-					messageCreateService = new V2NIMMessageCreate()
-				}
-				return messageCreateService!
-			},
-			getLimit() : number {
-				const value = parseInt(this.limitText)
-				if (isNaN(value)) {
-					return 20
-				}
-				return value
-			},
-			onConversationIdInput(e : InputEvent) { this.conversationId = e.detail.value },
-			onTextInput(e : InputEvent) { this.text = e.detail.value },
-			onLimitInput(e : InputEvent) { this.limitText = e.detail.value },
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			handleQueryMessages() {
-				this.ensureService().getMessageList({
-					conversationId: this.conversationId,
-					limit: this.getLimit()
-				}).then((res) => {
-					this.printResult('getMessageList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.conversationId = res.data![0].conversationId
-						setStoredString('demo_message_conversationId', this.conversationId)
-					}
-					uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
-				})
-			},
-			handleCreateTextMessage() {
-				setStoredString('demo_message_text', this.text)
-				createdMessage = this.ensureCreator().createTextMessage(this.text)
-				this.printResult('createTextMessage', JSON.stringify(createdMessage))
-				uni.showToast({ title: createdMessage != null ? '创建成功' : '创建失败', icon: 'none' })
-			},
-			handleSendMessage() {
-				const message = createdMessage
-				if (message == null) {
-					uni.showToast({ title: '请先创建文本消息', icon: 'none' })
-					return
-				}
-				this.ensureService().sendMessage(message, this.conversationId, null, null).then((res) => {
-					this.printResult('sendMessage', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '发送成功' : '发送失败', icon: 'none' })
-				})
-			},
-			toggleListener() {
-				const service = this.ensureService()
-				if (listenerEnabled) {
-					if (messageListener != null) {
-						service.removeMessageListener(messageListener!)
-					}
-					messageListener = null
-					listenerEnabled = false
-				} else {
-					const self = this
-					const listener : V2NIMMessageListener = {
-						onReceiveMessages(messages) {
-							if (messages.length > 0) {
-								self.conversationId = messages[0].conversationId
-								setStoredString('demo_message_conversationId', self.conversationId)
-							}
-							self.appendEvent('onReceiveMessages', JSON.stringify(messages))
-						},
-						onReceiveMessagesModified(messages) { self.appendEvent('onReceiveMessagesModified', JSON.stringify(messages)) },
-						onSendMessage(message) { self.appendEvent('onSendMessage', JSON.stringify(message)) },
-						onMessageRevokeNotifications(notifications) { self.appendEvent('onMessageRevokeNotifications', JSON.stringify(notifications)) },
-						onMessageDeletedNotifications(notifications) { self.appendEvent('onMessageDeletedNotifications', JSON.stringify(notifications)) },
-						onReceiveP2PMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveP2PMessageReadReceipts', JSON.stringify(readReceipts)) },
-						onReceiveTeamMessageReadReceipts(readReceipts) { self.appendEvent('onReceiveTeamMessageReadReceipts', JSON.stringify(readReceipts)) }
-					}
-					messageListener = listener
-					service.addMessageListener(listener)
-					listenerEnabled = true
-				}
-				this.listenerEnabled = listenerEnabled
+			uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
+		})
+	}
+
+	const handleCreateTextMessage = () => {
+		setStoredString('demo_message_text', text.value)
+		const creator = new V2NIMMessageCreate()
+		createdMessage = creator.createTextMessage(text.value)
+		const ok = createdMessage != null
+		printResult('createTextMessage', ok ? JSON.stringify(createdMessage) : '创建失败')
+		uni.showToast({ title: ok ? '创建成功' : '创建失败', icon: 'none' })
+	}
+
+	const handleSendMessage = () => {
+		const message = createdMessage
+		if (message == null) {
+			uni.showToast({ title: '请先创建文本消息', icon: 'none' })
+			return
+		}
+		// sendMessage 接收 any：Android 侧插件会把跨桥后的消息对象还原成原生消息。
+		ensureService().sendMessage(message, conversationId.value, null, null).then((res) => {
+			printResult('sendMessage', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '发送成功' : '发送失败', icon: 'none' })
+		})
+	}
+
+	const toggleListener = () => {
+		const service = ensureService()
+		if (listenerEnabled.value) {
+			if (messageListener != null) {
+				service.removeMessageListener(messageListener!)
 			}
+			messageListener = null
+			listenerEnabled.value = false
+		} else {
+			const listener : V2NIMMessageListener = {
+				onReceiveMessages(messages) {
+					if (messages.length > 0) {
+						conversationId.value = messages[0].conversationId
+						setStoredString('demo_message_conversationId', conversationId.value)
+					}
+					appendEvent('onReceiveMessages', JSON.stringify(messages))
+				},
+				onReceiveMessagesModified(messages) { appendEvent('onReceiveMessagesModified', JSON.stringify(messages)) },
+				onSendMessage(message) { appendEvent('onSendMessage', JSON.stringify(message)) },
+				onMessageRevokeNotifications(notifications) { appendEvent('onMessageRevokeNotifications', JSON.stringify(notifications)) },
+				onMessageDeletedNotifications(notifications) { appendEvent('onMessageDeletedNotifications', JSON.stringify(notifications)) },
+				onReceiveP2PMessageReadReceipts(readReceipts) { appendEvent('onReceiveP2PMessageReadReceipts', JSON.stringify(readReceipts)) },
+				onReceiveTeamMessageReadReceipts(readReceipts) { appendEvent('onReceiveTeamMessageReadReceipts', JSON.stringify(readReceipts)) }
+			}
+			messageListener = listener
+			service.addMessageListener(listener)
+			listenerEnabled.value = true
 		}
 	}
 </script>

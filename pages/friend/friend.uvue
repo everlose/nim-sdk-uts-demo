@@ -48,127 +48,142 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
-		V2NIMFriendAddMode,
 		V2NIMFriendListener,
 		V2NIMFriendService
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
+	const accountId = ref('' as string)
+	const accountIdsText = ref('' as string)
+	const keyword = ref(getStoredString('demo_friend_keyword', '332103') as string)
+	const postscript = ref(getStoredString('demo_friend_postscript', 'hi') as string)
+	const listenerEnabled = ref(false as boolean)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
+
 	let friendService : V2NIMFriendService | null = null
-	let listenerEnabled : boolean = false
+
+	// 蒸汽模式下页面逻辑层是 JS：插件不再导出枚举对象，入参枚举一律用数字（与插件 Android 层约定），
+	// 数值取自 utssdk/types/Enum.uts。addFriend 内部会把数字 addMode 归一化成原生枚举。
+	const FRIEND_ADD_MODE_APPLY : number = 2
 	let friendListener : V2NIMFriendListener | null = null
 
-	export default {
-		data() {
-			return {
-				accountId: '' as string,
-				accountIdsText: '' as string,
-				keyword: getStoredString('demo_friend_keyword', '332103') as string,
-				postscript: getStoredString('demo_friend_postscript', 'hi') as string,
-				listenerEnabled: listenerEnabled as boolean,
-				resultText: '暂无结果' as string,
-				listenerText: '暂无监听内容' as string
+	const ensureService = () : V2NIMFriendService => {
+		if (friendService == null) {
+			friendService = new V2NIMFriendService()
+		}
+		return friendService!
+	}
+
+	const parseAccountIds = () : string[] => {
+		const parts = accountIdsText.value.split(',')
+		const result : string[] = []
+		for (let i = 0; i < parts.length; i++) {
+			const item = parts[i].trim()
+			if (item.length > 0) {
+				result.push(item)
 			}
-		},
-		methods: {
-			ensureService() : V2NIMFriendService {
-				if (friendService == null) {
-					friendService = new V2NIMFriendService()
-				}
-				return friendService!
-			},
-			parseAccountIds() : string[] {
-				const parts = this.accountIdsText.split(',')
-				const result : string[] = []
-				for (let i = 0; i < parts.length; i++) {
-					const item = parts[i].trim()
-					if (item.length > 0) {
-						result.push(item)
-					}
-				}
-				return result
-			},
-			onAccountIdInput(e : InputEvent) { this.accountId = e.detail.value },
-			onAccountIdsInput(e : InputEvent) { this.accountIdsText = e.detail.value },
-			onKeywordInput(e : InputEvent) { this.keyword = e.detail.value },
-			onPostscriptInput(e : InputEvent) { this.postscript = e.detail.value },
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			handleGetFriendList() {
-				this.ensureService().getFriendList().then((res) => {
-					this.printResult('getFriendList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.accountId = res.data![0].accountId
-						this.accountIdsText = this.accountId
-						setStoredString('demo_friend_accountId', this.accountId)
-						setStoredString('demo_friend_accountIds', this.accountIdsText)
-					}
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			handleGetFriendByIds() {
-				this.ensureService().getFriendByIds(this.parseAccountIds()).then((res) => {
-					this.printResult('getFriendByIds', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.accountId = res.data![0].accountId
-						this.accountIdsText = this.accountId
-						setStoredString('demo_friend_accountId', this.accountId)
-						setStoredString('demo_friend_accountIds', this.accountIdsText)
-					}
-					uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
-				})
-			},
-			handleAddFriend() {
-				setStoredString('demo_friend_postscript', this.postscript)
-				this.ensureService().addFriend(this.accountId, {
-					addMode: V2NIMFriendAddMode.V2NIM_FRIEND_MODE_TYPE_APPLY,
-					postscript: this.postscript
-				}).then((res) => {
-					this.printResult('addFriend', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '已发起' : '失败', icon: 'none' })
-				})
-			},
-			handleDeleteFriend() {
-				this.ensureService().deleteFriend(this.accountId, {
-					deleteAlias: false
-				}).then((res) => {
-					this.printResult('deleteFriend', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '删除成功' : '删除失败', icon: 'none' })
-				})
-			},
-			toggleListener() {
-				const service = this.ensureService()
-				if (listenerEnabled) {
-					if (friendListener != null) {
-						service.removeFriendListener(friendListener!)
-					}
-					friendListener = null
-					listenerEnabled = false
-				} else {
-					const self = this
-					const listener : V2NIMFriendListener = {
-						onFriendAdded(friendInfo) { self.appendEvent('onFriendAdded', JSON.stringify(friendInfo)) },
-						onFriendDeleted(accountId, deletionType) {
-							self.appendEvent('onFriendDeleted', JSON.stringify({ accountId: accountId, deletionType: deletionType }))
-						},
-						onFriendAddApplication(applicationInfo) { self.appendEvent('onFriendAddApplication', JSON.stringify(applicationInfo)) },
-						onFriendAddRejected(rejectionInfo) { self.appendEvent('onFriendAddRejected', JSON.stringify(rejectionInfo)) },
-						onFriendInfoChanged(friendInfo) { self.appendEvent('onFriendInfoChanged', JSON.stringify(friendInfo)) }
-					}
-					friendListener = listener
-					service.addFriendListener(listener)
-					listenerEnabled = true
-				}
-				this.listenerEnabled = listenerEnabled
+		}
+		return result
+	}
+
+	const onAccountIdInput = (e : InputEvent) => {
+		accountId.value = e.detail.value
+	}
+
+	const onAccountIdsInput = (e : InputEvent) => {
+		accountIdsText.value = e.detail.value
+	}
+
+	const onKeywordInput = (e : InputEvent) => {
+		keyword.value = e.detail.value
+	}
+
+	const onPostscriptInput = (e : InputEvent) => {
+		postscript.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	const handleGetFriendList = () => {
+		ensureService().getFriendList().then((res) => {
+			printResult('getFriendList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				accountId.value = res.data![0].accountId
+				accountIdsText.value = accountId.value
+				setStoredString('demo_friend_accountId', accountId.value)
+				setStoredString('demo_friend_accountIds', accountIdsText.value)
 			}
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const handleGetFriendByIds = () => {
+		ensureService().getFriendByIds(parseAccountIds()).then((res) => {
+			printResult('getFriendByIds', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				accountId.value = res.data![0].accountId
+				accountIdsText.value = accountId.value
+				setStoredString('demo_friend_accountId', accountId.value)
+				setStoredString('demo_friend_accountIds', accountIdsText.value)
+			}
+			uni.showToast({ title: res.code == 200 ? '查询成功' : '查询失败', icon: 'none' })
+		})
+	}
+
+	const handleAddFriend = () => {
+		setStoredString('demo_friend_postscript', postscript.value)
+		// Android 的 addFriend 现在接收 any，插件内部会把 JSON 参数归一化成原生参数；
+		// 页面继续传数字枚举即可，不再需要平台分支。
+		ensureService().addFriend(accountId.value, {
+			addMode: FRIEND_ADD_MODE_APPLY,
+			postscript: postscript.value
+		}).then((res) => {
+			printResult('addFriend', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '已发起' : '失败', icon: 'none' })
+		})
+	}
+
+	const handleDeleteFriend = () => {
+		ensureService().deleteFriend(accountId.value, {
+			deleteAlias: false
+		}).then((res) => {
+			printResult('deleteFriend', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '删除成功' : '删除失败', icon: 'none' })
+		})
+	}
+
+	const toggleListener = () => {
+		const service = ensureService()
+		if (listenerEnabled.value) {
+			if (friendListener != null) {
+				service.removeFriendListener(friendListener!)
+			}
+			friendListener = null
+			listenerEnabled.value = false
+		} else {
+			const listener : V2NIMFriendListener = {
+				onFriendAdded(friendInfo) { appendEvent('onFriendAdded', JSON.stringify(friendInfo)) },
+				onFriendDeleted(deletedAccountId, deletionType) {
+					appendEvent('onFriendDeleted', JSON.stringify({ accountId: deletedAccountId, deletionType: deletionType }))
+				},
+				onFriendAddApplication(applicationInfo) { appendEvent('onFriendAddApplication', JSON.stringify(applicationInfo)) },
+				onFriendAddRejected(rejectionInfo) { appendEvent('onFriendAddRejected', JSON.stringify(rejectionInfo)) },
+				onFriendInfoChanged(friendInfo) { appendEvent('onFriendInfoChanged', JSON.stringify(friendInfo)) }
+			}
+			friendListener = listener
+			service.addFriendListener(listener)
+			listenerEnabled.value = true
 		}
 	}
 </script>

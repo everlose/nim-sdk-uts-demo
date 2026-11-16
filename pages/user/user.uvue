@@ -48,132 +48,141 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
 		V2NIMUserService,
 		V2NIMUserListener
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
+	const accountIdsText = ref('' as string)
+	const keyword = ref(getStoredString('demo_user_keyword', '332103') as string)
+	const name = ref(getStoredString('demo_user_name', 'demo-name') as string)
+	const sign = ref(getStoredString('demo_user_sign', 'demo-sign') as string)
+	const listenerEnabled = ref(false as boolean)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
+
 	let userService : V2NIMUserService | null = null
-	let listenerEnabled : boolean = false
 	let userListener : V2NIMUserListener | null = null
 
-	export default {
-		data() {
-			return {
-				accountIdsText: '' as string,
-				keyword: getStoredString('demo_user_keyword', '332103') as string,
-				name: getStoredString('demo_user_name', 'demo-name') as string,
-				sign: getStoredString('demo_user_sign', 'demo-sign') as string,
-				listenerEnabled: listenerEnabled as boolean,
-				resultText: '暂无结果' as string,
-				listenerText: '暂无监听内容' as string
+	const ensureService = () : V2NIMUserService => {
+		if (userService == null) {
+			userService = new V2NIMUserService()
+		}
+		return userService!
+	}
+
+	const parseAccountIds = () : string[] => {
+		const parts = accountIdsText.value.split(',')
+		const result : string[] = []
+		for (let i = 0; i < parts.length; i++) {
+			const item = parts[i].trim()
+			if (item.length > 0) {
+				result.push(item)
 			}
-		},
-		methods: {
-			ensureService() : V2NIMUserService {
-				if (userService == null) {
-					userService = new V2NIMUserService()
-				}
-				return userService!
-			},
-			parseAccountIds() : string[] {
-				const text = this.accountIdsText
-				const parts = text.split(',')
-				const result : string[] = []
-				for (let i = 0; i < parts.length; i++) {
-					const item = parts[i].trim()
-					if (item.length > 0) {
-						result.push(item)
-					}
-				}
-				return result
-			},
-			onAccountIdsInput(e : InputEvent) { this.accountIdsText = e.detail.value },
-			onKeywordInput(e : InputEvent) { this.keyword = e.detail.value },
-			onNameInput(e : InputEvent) { this.name = e.detail.value },
-			onSignInput(e : InputEvent) { this.sign = e.detail.value },
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			handleGetUserList() {
-				const service = this.ensureService()
-				const accountIds = this.parseAccountIds()
-				service.getUserList(accountIds).then((res) => {
-					this.printResult('getUserList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.accountIdsText = res.data![0].accountId
-						setStoredString('demo_user_accountIds', this.accountIdsText)
-					}
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			handleGetUserListFromCloud() {
-				const service = this.ensureService()
-				const accountIds = this.parseAccountIds()
-				service.getUserListFromCloud(accountIds).then((res) => {
-					this.printResult('getUserListFromCloud', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.accountIdsText = res.data![0].accountId
-						setStoredString('demo_user_accountIds', this.accountIdsText)
-					}
-					uni.showToast({ title: res.code == 200 ? '云端获取成功' : '云端获取失败', icon: 'none' })
-				})
-			},
-			handleSearchUser() {
-				const service = this.ensureService()
-				service.searchUserByOption({
-					keyword: this.keyword,
-					searchName: true,
-					searchAccountId: true
-				}).then((res) => {
-					this.printResult('searchUserByOption', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.accountIdsText = res.data![0].accountId
-						setStoredString('demo_user_accountIds', this.accountIdsText)
-					}
-					uni.showToast({ title: res.code == 200 ? '搜索成功' : '搜索失败', icon: 'none' })
-				})
-			},
-			handleUpdateSelfUserProfile() {
-				setStoredString('demo_user_name', this.name)
-				setStoredString('demo_user_sign', this.sign)
-				const service = this.ensureService()
-				service.updateSelfUserProfile({
-					name: this.name,
-					sign: this.sign
-				}).then((res) => {
-					this.printResult('updateSelfUserProfile', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '更新成功' : '更新失败', icon: 'none' })
-				})
-			},
-			toggleListener() {
-				const service = this.ensureService()
-				if (listenerEnabled) {
-					if (userListener != null) {
-						service.removeUserListener(userListener!)
-					}
-					userListener = null
-					listenerEnabled = false
-				} else {
-					const self = this
-					const listener : V2NIMUserListener = {
-						onUserProfileChanged(users) { self.appendEvent('onUserProfileChanged', JSON.stringify(users)) },
-						onBlockListAdded(user) { self.appendEvent('onBlockListAdded', JSON.stringify(user)) },
-						onBlockListRemoved(accountId) { self.appendEvent('onBlockListRemoved', JSON.stringify(accountId)) }
-					}
-					userListener = listener
-					service.addUserListener(listener)
-					listenerEnabled = true
-				}
-				this.listenerEnabled = listenerEnabled
+		}
+		return result
+	}
+
+	const onAccountIdsInput = (e : InputEvent) => {
+		accountIdsText.value = e.detail.value
+	}
+
+	const onKeywordInput = (e : InputEvent) => {
+		keyword.value = e.detail.value
+	}
+
+	const onNameInput = (e : InputEvent) => {
+		name.value = e.detail.value
+	}
+
+	const onSignInput = (e : InputEvent) => {
+		sign.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	const handleGetUserList = () => {
+		const service = ensureService()
+		const ids = parseAccountIds()
+		service.getUserList(ids).then((res) => {
+			printResult('getUserList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				accountIdsText.value = res.data![0].accountId
+				setStoredString('demo_user_accountIds', accountIdsText.value)
 			}
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const handleGetUserListFromCloud = () => {
+		const service = ensureService()
+		const ids = parseAccountIds()
+		service.getUserListFromCloud(ids).then((res) => {
+			printResult('getUserListFromCloud', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				accountIdsText.value = res.data![0].accountId
+				setStoredString('demo_user_accountIds', accountIdsText.value)
+			}
+			uni.showToast({ title: res.code == 200 ? '云端获取成功' : '云端获取失败', icon: 'none' })
+		})
+	}
+
+	const handleSearchUser = () => {
+		const service = ensureService()
+		service.searchUserByOption({
+			keyword: keyword.value,
+			searchName: true,
+			searchAccountId: true
+		}).then((res) => {
+			printResult('searchUserByOption', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				accountIdsText.value = res.data![0].accountId
+				setStoredString('demo_user_accountIds', accountIdsText.value)
+			}
+			uni.showToast({ title: res.code == 200 ? '搜索成功' : '搜索失败', icon: 'none' })
+		})
+	}
+
+	const handleUpdateSelfUserProfile = () => {
+		setStoredString('demo_user_name', name.value)
+		setStoredString('demo_user_sign', sign.value)
+		const service = ensureService()
+		service.updateSelfUserProfile({
+			name: name.value,
+			sign: sign.value
+		}).then((res) => {
+			printResult('updateSelfUserProfile', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '更新成功' : '更新失败', icon: 'none' })
+		})
+	}
+
+	const toggleListener = () => {
+		const service = ensureService()
+		if (listenerEnabled.value) {
+			if (userListener != null) {
+				service.removeUserListener(userListener!)
+			}
+			userListener = null
+			listenerEnabled.value = false
+		} else {
+			const listener : V2NIMUserListener = {
+				onUserProfileChanged(users) { appendEvent('onUserProfileChanged', JSON.stringify(users)) },
+				onBlockListAdded(user) { appendEvent('onBlockListAdded', JSON.stringify(user)) },
+				onBlockListRemoved(removedAccountId) { appendEvent('onBlockListRemoved', JSON.stringify(removedAccountId)) }
+			}
+			userListener = listener
+			service.addUserListener(listener)
+			listenerEnabled.value = true
 		}
 	}
 </script>

@@ -40,111 +40,115 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
 		V2NIMLocalConversationListener,
 		V2NIMLocalConversationService
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
+	const conversationId = ref('' as string)
+	const limitText = ref(getStoredString('demo_local_limit', '20') as string)
+	const listenerEnabled = ref(false as boolean)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
+
 	let localConversationService : V2NIMLocalConversationService | null = null
-	let listenerEnabled : boolean = false
 	let localConversationListener : V2NIMLocalConversationListener | null = null
 
-	export default {
-		data() {
-			return {
-				conversationId: '' as string,
-				limitText: getStoredString('demo_local_limit', '20') as string,
-				listenerEnabled: listenerEnabled as boolean,
-				resultText: '暂无结果' as string,
-				listenerText: '暂无监听内容' as string
+	const ensureService = () : V2NIMLocalConversationService => {
+		if (localConversationService == null) {
+			localConversationService = new V2NIMLocalConversationService()
+		}
+		return localConversationService!
+	}
+
+	const getLimit = () : number => {
+		const value = parseInt(limitText.value)
+		if (isNaN(value)) {
+			return 20
+		}
+		return value
+	}
+
+	const onConversationIdInput = (e : InputEvent) => {
+		conversationId.value = e.detail.value
+	}
+
+	const onLimitInput = (e : InputEvent) => {
+		limitText.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	const handleGetConversationList = () => {
+		ensureService().getConversationList(0, getLimit()).then((res) => {
+			printResult('getConversationList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.conversationList.length > 0) {
+				conversationId.value = res.data!.conversationList[0].conversationId
+				setStoredString('demo_local_conversationId', conversationId.value)
 			}
-		},
-		methods: {
-			ensureService() : V2NIMLocalConversationService {
-				if (localConversationService == null) {
-					localConversationService = new V2NIMLocalConversationService()
-				}
-				return localConversationService!
-			},
-			getLimit() : number {
-				const value = parseInt(this.limitText)
-				if (isNaN(value)) {
-					return 20
-				}
-				return value
-			},
-			onConversationIdInput(e : InputEvent) { this.conversationId = e.detail.value },
-			onLimitInput(e : InputEvent) { this.limitText = e.detail.value },
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			handleGetConversationList() {
-				this.ensureService().getConversationList(0, this.getLimit()).then((res) => {
-					this.printResult('getConversationList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.conversationList.length > 0) {
-						this.conversationId = res.data!.conversationList[0].conversationId
-						setStoredString('demo_local_conversationId', this.conversationId)
-					}
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			handleCreateConversation() {
-				setStoredString('demo_local_conversationId', this.conversationId)
-				this.ensureService().createConversation(this.conversationId).then((res) => {
-					this.printResult('createConversation', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '创建成功' : '创建失败', icon: 'none' })
-				})
-			},
-			handleDeleteConversation() {
-				this.ensureService().deleteConversation(this.conversationId, true).then((res) => {
-					this.printResult('deleteConversation', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '删除成功' : '删除失败', icon: 'none' })
-				})
-			},
-			handleStickTopConversation() {
-				this.ensureService().stickTopConversation(this.conversationId, true).then((res) => {
-					this.printResult('stickTopConversation', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '已置顶' : '置顶失败', icon: 'none' })
-				})
-			},
-			toggleListener() {
-				const service = this.ensureService()
-				if (listenerEnabled) {
-					if (localConversationListener != null) {
-						service.removeConversationListener(localConversationListener!)
-					}
-					localConversationListener = null
-					listenerEnabled = false
-				} else {
-					const self = this
-					const listener : V2NIMLocalConversationListener = {
-						onSyncStarted() { self.appendEvent('onSyncStarted', 'started') },
-						onSyncFinished() { self.appendEvent('onSyncFinished', 'finished') },
-						onSyncFailed(error) { self.appendEvent('onSyncFailed', JSON.stringify(error)) },
-						onConversationCreated(conversation) { self.appendEvent('onConversationCreated', JSON.stringify(conversation)) },
-						onConversationChanged(conversationList) { self.appendEvent('onConversationChanged', JSON.stringify(conversationList)) },
-						onConversationDeleted(conversationIds) { self.appendEvent('onConversationDeleted', JSON.stringify(conversationIds)) },
-						onConversationReadTimeUpdated(conversationId, readTime) {
-							self.appendEvent('onConversationReadTimeUpdated', JSON.stringify({ conversationId: conversationId, readTime: readTime }))
-						},
-						onTotalUnreadCountChanged(unreadCount) { self.appendEvent('onTotalUnreadCountChanged', JSON.stringify(unreadCount)) },
-						onUnreadCountChangedByFilter(filter, unreadCount) {
-							self.appendEvent('onUnreadCountChangedByFilter', JSON.stringify({ filter: filter, unreadCount: unreadCount }))
-						}
-					}
-					localConversationListener = listener
-					service.addConversationListener(listener)
-					listenerEnabled = true
-				}
-				this.listenerEnabled = listenerEnabled
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const handleCreateConversation = () => {
+		setStoredString('demo_local_conversationId', conversationId.value)
+		ensureService().createConversation(conversationId.value).then((res) => {
+			printResult('createConversation', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '创建成功' : '创建失败', icon: 'none' })
+		})
+	}
+
+	const handleDeleteConversation = () => {
+		ensureService().deleteConversation(conversationId.value, true).then((res) => {
+			printResult('deleteConversation', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '删除成功' : '删除失败', icon: 'none' })
+		})
+	}
+
+	const handleStickTopConversation = () => {
+		ensureService().stickTopConversation(conversationId.value, true).then((res) => {
+			printResult('stickTopConversation', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '已置顶' : '置顶失败', icon: 'none' })
+		})
+	}
+
+	const toggleListener = () => {
+		const service = ensureService()
+		if (listenerEnabled.value) {
+			if (localConversationListener != null) {
+				service.removeConversationListener(localConversationListener!)
 			}
+			localConversationListener = null
+			listenerEnabled.value = false
+		} else {
+			const listener : V2NIMLocalConversationListener = {
+				onSyncStarted() { appendEvent('onSyncStarted', 'started') },
+				onSyncFinished() { appendEvent('onSyncFinished', 'finished') },
+				onSyncFailed(error) { appendEvent('onSyncFailed', JSON.stringify(error)) },
+				onConversationCreated(conversation) { appendEvent('onConversationCreated', JSON.stringify(conversation)) },
+				onConversationChanged(conversationList) { appendEvent('onConversationChanged', JSON.stringify(conversationList)) },
+				onConversationDeleted(deletedConversationIds) { appendEvent('onConversationDeleted', JSON.stringify(deletedConversationIds)) },
+				onConversationReadTimeUpdated(readConversationId, readTime) {
+					appendEvent('onConversationReadTimeUpdated', JSON.stringify({ conversationId: readConversationId, readTime: readTime }))
+				},
+				onTotalUnreadCountChanged(unreadCount) { appendEvent('onTotalUnreadCountChanged', JSON.stringify(unreadCount)) },
+				onUnreadCountChangedByFilter(filter, unreadCount) {
+					appendEvent('onUnreadCountChangedByFilter', JSON.stringify({ filter: filter, unreadCount: unreadCount }))
+				}
+			}
+			localConversationListener = listener
+			service.addConversationListener(listener)
+			listenerEnabled.value = true
 		}
 	}
 </script>

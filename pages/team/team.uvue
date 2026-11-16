@@ -44,134 +44,145 @@
 	</scroll-view>
 </template>
 
-<script lang="uts">
+<script setup lang="uts">
 	import {
 		V2NIMTeamListener,
-		V2NIMTeamService,
-		V2NIMTeamType
+		V2NIMTeamService
 	} from '@/uni_modules/nim-uts-sdk'
 	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
+	const teamId = ref('' as string)
+	const name = ref(getStoredString('demo_team_name', 'demo team') as string)
+	const memberAccountId = ref('' as string)
+	const listenerEnabled = ref(false as boolean)
+	const resultText = ref('暂无结果' as string)
+	const listenerText = ref('暂无监听内容' as string)
+
 	let teamService : V2NIMTeamService | null = null
-	let listenerEnabled : boolean = false
+
+	// 蒸汽模式下页面逻辑层是 JS，插件不再导出枚举对象。
+	// 当前 SDK 的群接口已经接收 any 并在插件内部把数字归一化成原生枚举，
+	// 页面直接传数字 / 对象字面量即可，不再需要 builder 或平台分支。
+	const TEAM_TYPE_NORMAL : number = 1
 	let teamListener : V2NIMTeamListener | null = null
 
-	export default {
-		data() {
-			return {
-				teamId: '' as string,
-				name: getStoredString('demo_team_name', 'demo team') as string,
-				memberAccountId: '' as string,
-				listenerEnabled: listenerEnabled as boolean,
-				resultText: '暂无结果' as string,
-				listenerText: '暂无监听内容' as string
+	const ensureService = () : V2NIMTeamService => {
+		if (teamService == null) {
+			teamService = new V2NIMTeamService()
+		}
+		return teamService!
+	}
+
+	const onTeamIdInput = (e : InputEvent) => {
+		teamId.value = e.detail.value
+	}
+
+	const onNameInput = (e : InputEvent) => {
+		name.value = e.detail.value
+	}
+
+	const onMemberAccountIdInput = (e : InputEvent) => {
+		memberAccountId.value = e.detail.value
+	}
+
+	const printResult = (title : string, payloadText : string) => {
+		resultText.value = title + '\n' + payloadText
+		console.log(title, payloadText)
+	}
+
+	const appendEvent = (title : string, payloadText : string) => {
+		listenerText.value = '[监听] ' + title + '\n' + payloadText + '\n\n' + listenerText.value
+		console.log(title, payloadText)
+	}
+
+	const handleCreateTeam = () => {
+		setStoredString('demo_team_teamId', teamId.value)
+		setStoredString('demo_team_name', name.value)
+		// Android 侧插件会把对象里的数字 teamType 归一化成原生枚举，其它端继续走 typed 参数。
+		ensureService().createTeam({
+			teamType: TEAM_TYPE_NORMAL,
+			name: name.value,
+			avatar: '',
+			intro: 'demo intro',
+			announcement: 'demo announcement',
+			serverExtension: '{}',
+			memberLimit: 100
+		}, null, null, null).then((res) => {
+			printResult('createTeam', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.team != null) {
+				teamId.value = res.data!.team!.teamId
+				setStoredString('demo_team_teamId', teamId.value)
 			}
-		},
-		methods: {
-			ensureService() : V2NIMTeamService {
-				if (teamService == null) {
-					teamService = new V2NIMTeamService()
-				}
-				return teamService!
-			},
-			onTeamIdInput(e : InputEvent) { this.teamId = e.detail.value },
-			onNameInput(e : InputEvent) { this.name = e.detail.value },
-			onMemberAccountIdInput(e : InputEvent) { this.memberAccountId = e.detail.value },
-			printResult(title : string, payloadText : string) {
-				this.resultText = title + '\n' + payloadText
-				console.log(title, payloadText)
-			},
-			appendEvent(title : string, payloadText : string) {
-				this.listenerText = '[监听] ' + title + '\n' + payloadText + '\n\n' + this.listenerText
-				console.log(title, payloadText)
-			},
-			handleCreateTeam() {
-				setStoredString('demo_team_teamId', this.teamId)
-				setStoredString('demo_team_name', this.name)
-				this.ensureService().createTeam({
-					teamType: V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL,
-					name: this.name,
-					avatar: '',
-					intro: 'demo intro',
-					announcement: 'demo announcement',
-					serverExtension: '{}',
-					memberLimit: 100
-				}, null, null, null).then((res) => {
-					this.printResult('createTeam', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.team != null) {
-						this.teamId = res.data!.team!.teamId
-						setStoredString('demo_team_teamId', this.teamId)
-					}
-					uni.showToast({ title: res.code == 200 ? '创建成功' : '创建失败', icon: 'none' })
-				})
-			},
-			handleGetJoinedTeamList() {
-				this.ensureService().getJoinedTeamList(null).then((res) => {
-					this.printResult('getJoinedTeamList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.length > 0) {
-						this.teamId = res.data![0].teamId
-						this.name = res.data![0].name
-						setStoredString('demo_team_teamId', this.teamId)
-						setStoredString('demo_team_name', this.name)
-					}
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			handleGetTeamInfo() {
-				this.ensureService().getTeamInfo(this.teamId, V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL).then((res) => {
-					this.printResult('getTeamInfo', JSON.stringify(res))
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			handleGetTeamMemberList() {
-				this.ensureService().getTeamMemberList(this.teamId, V2NIMTeamType.V2NIM_TEAM_TYPE_NORMAL, {
-					limit: 20,
-					onlyChatBanned: false,
-					nextToken: ''
-				}).then((res) => {
-					this.printResult('getTeamMemberList', JSON.stringify(res))
-					if (res.code == 200 && res.data != null && res.data!.memberList.length > 0) {
-						this.memberAccountId = res.data!.memberList[0].accountId
-						setStoredString('demo_team_memberAccountId', this.memberAccountId)
-					}
-					uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
-				})
-			},
-			toggleListener() {
-				const service = this.ensureService()
-				if (listenerEnabled) {
-					if (teamListener != null) {
-						service.removeTeamListener(teamListener!)
-					}
-					teamListener = null
-					listenerEnabled = false
-				} else {
-					const self = this
-					const listener : V2NIMTeamListener = {
-						onSyncStarted() { self.appendEvent('onSyncStarted', 'started') },
-						onSyncFinished() { self.appendEvent('onSyncFinished', 'finished') },
-						onSyncFailed(error) { self.appendEvent('onSyncFailed', JSON.stringify(error)) },
-						onTeamCreated(team) { self.appendEvent('onTeamCreated', JSON.stringify(team)) },
-						onTeamInfoUpdated(team) { self.appendEvent('onTeamInfoUpdated', JSON.stringify(team)) },
-						onTeamDismissed(team) { self.appendEvent('onTeamDismissed', JSON.stringify(team)) },
-						onTeamJoined(team) { self.appendEvent('onTeamJoined', JSON.stringify(team)) },
-						onTeamLeft(team, isKicked) {
-							self.appendEvent('onTeamLeft', JSON.stringify({ team: team, isKicked: isKicked }))
-						},
-						onTeamMemberJoined(teamMembers) { self.appendEvent('onTeamMemberJoined', JSON.stringify(teamMembers)) },
-						onTeamMemberKicked(operatorAccountId, teamMembers) {
-							self.appendEvent('onTeamMemberKicked', JSON.stringify({ operatorAccountId: operatorAccountId, teamMembers: teamMembers }))
-						},
-						onTeamMemberLeft(teamMembers) { self.appendEvent('onTeamMemberLeft', JSON.stringify(teamMembers)) },
-						onTeamMemberInfoUpdated(teamMembers) { self.appendEvent('onTeamMemberInfoUpdated', JSON.stringify(teamMembers)) },
-						onReceiveTeamJoinActionInfo(joinActionInfo) { self.appendEvent('onReceiveTeamJoinActionInfo', JSON.stringify(joinActionInfo)) }
-					}
-					teamListener = listener
-					service.addTeamListener(listener)
-					listenerEnabled = true
-				}
-				this.listenerEnabled = listenerEnabled
+			uni.showToast({ title: res.code == 200 ? '创建成功' : '创建失败', icon: 'none' })
+		})
+	}
+
+	const handleGetJoinedTeamList = () => {
+		ensureService().getJoinedTeamList(null).then((res) => {
+			printResult('getJoinedTeamList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.length > 0) {
+				teamId.value = res.data![0].teamId
+				name.value = res.data![0].name
+				setStoredString('demo_team_teamId', teamId.value)
+				setStoredString('demo_team_name', name.value)
 			}
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const handleGetTeamInfo = () => {
+		ensureService().getTeamInfo(teamId.value, TEAM_TYPE_NORMAL).then((res) => {
+			printResult('getTeamInfo', JSON.stringify(res))
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const handleGetTeamMemberList = () => {
+		ensureService().getTeamMemberList(teamId.value, TEAM_TYPE_NORMAL, {
+			limit: 20,
+			onlyChatBanned: false,
+			nextToken: ''
+		}).then((res) => {
+			printResult('getTeamMemberList', JSON.stringify(res))
+			if (res.code == 200 && res.data != null && res.data!.memberList.length > 0) {
+				memberAccountId.value = res.data!.memberList[0].accountId
+				setStoredString('demo_team_memberAccountId', memberAccountId.value)
+			}
+			uni.showToast({ title: res.code == 200 ? '获取成功' : '获取失败', icon: 'none' })
+		})
+	}
+
+	const toggleListener = () => {
+		const service = ensureService()
+		if (listenerEnabled.value) {
+			if (teamListener != null) {
+				service.removeTeamListener(teamListener!)
+			}
+			teamListener = null
+			listenerEnabled.value = false
+		} else {
+			const listener : V2NIMTeamListener = {
+				onSyncStarted() { appendEvent('onSyncStarted', 'started') },
+				onSyncFinished() { appendEvent('onSyncFinished', 'finished') },
+				onSyncFailed(error) { appendEvent('onSyncFailed', JSON.stringify(error)) },
+				onTeamCreated(team) { appendEvent('onTeamCreated', JSON.stringify(team)) },
+				onTeamInfoUpdated(team) { appendEvent('onTeamInfoUpdated', JSON.stringify(team)) },
+				onTeamDismissed(team) { appendEvent('onTeamDismissed', JSON.stringify(team)) },
+				onTeamJoined(team) { appendEvent('onTeamJoined', JSON.stringify(team)) },
+				onTeamLeft(team, isKicked) {
+					appendEvent('onTeamLeft', JSON.stringify({ team: team, isKicked: isKicked }))
+				},
+				onTeamMemberJoined(teamMembers) { appendEvent('onTeamMemberJoined', JSON.stringify(teamMembers)) },
+				onTeamMemberKicked(operatorAccountId, teamMembers) {
+					appendEvent('onTeamMemberKicked', JSON.stringify({ operatorAccountId: operatorAccountId, teamMembers: teamMembers }))
+				},
+				onTeamMemberLeft(teamMembers) { appendEvent('onTeamMemberLeft', JSON.stringify(teamMembers)) },
+				onTeamMemberInfoUpdated(teamMembers) { appendEvent('onTeamMemberInfoUpdated', JSON.stringify(teamMembers)) },
+				onReceiveTeamJoinActionInfo(joinActionInfo) { appendEvent('onReceiveTeamJoinActionInfo', JSON.stringify(joinActionInfo)) }
+			}
+			teamListener = listener
+			service.addTeamListener(listener)
+			listenerEnabled.value = true
 		}
 	}
 </script>

@@ -16,9 +16,17 @@
 
 ### 0. 安装 nim-uts-sdk 插件（必装）
 
-本仓库已将 `uni_modules/nim-uts-sdk` 加入 `.gitignore`，克隆后工程里**没有这个插件**，需自行安装：
+本仓库已将 `uni_modules/nim-uts-sdk` 加入 `.gitignore`，克隆后工程里**没有这个插件**。
 
-直接访问 [DCloud 插件市场 nim-uts-sdk](https://ext.dcloud.net.cn/plugin?name=nim-uts-sdk) 导入到本工程。
+蒸汽模式适配依赖本地插件里的 `initNIMSDKJson` 入口，以及消息 / 好友等公共方法内部的
+`any -> 原生类型` 归一化逻辑（`createTextMessage`、`sendMessage`、`getMessageList`、`addFriend` 等）。
+**市场版插件没有这些适配**，直接导入会在真机上出现跨桥类型错误。本工程当前通过软链接使用本地 SDK 源码：
+
+```sh
+uni_modules/nim-uts-sdk -> /Users/george/uniappProject/nim-uts-sdk/uni_modules/nim-uts-sdk
+```
+
+如果换机器或重新克隆，请把该软链接指向包含蒸汽模式适配的本地插件版本（或把本地插件目录拷贝进来）。
 
 ### 1. 云信账号信息（必填）
 
@@ -81,6 +89,101 @@ const DEMO_LOGIN_CONFIG : DemoLoginConfig = {
 ```sh
 rm -rf unpackage/dist/dev/app-harmony
 ```
+
+### 蒸汽模式（vapor）注意事项
+
+本工程 `manifest.json` 已开启 `uni-app-x.vapor`，并指向本地插件源码（`uni_modules/nim-uts-sdk`）。
+蒸汽模式下页面逻辑层是 JS，UTS 插件与页面之间要跨桥，因此页面侧需要遵循下面的约定；本工程已全部按此适配。
+
+#### 1. 页面不能 import 插件导出的枚举对象
+
+`export enum V2NIMXxx {...}` 这类对象在**生产打包 / 自定义基座**下不会进入 uts 代理导出表：
+
+- 运行（dev）模式正常：插件走 uts2js 直接编译，枚举可用；
+- 云打包 / 自定义基座会报 `"V2NIMLoginStatus" is not exported by ...uni_modules/nim-uts-sdk?uts-proxy`。
+
+页面侧因此不再 import 任何枚举对象，枚举入参一律传**数字**（数值取自 `utssdk/types/Enum.uts`）：
+
+```uts
+const LOGIN_STATUS_LOGINED : number = 1
+if (status == LOGIN_STATUS_LOGINED) { /* ... */ }
+```
+
+个别接口（如群、好友）的枚举参数已在插件内部做数字归一化，页面直接传数字 / 对象字面量即可，见第 5 节。
+
+#### 2. 初始化：使用 `initNIMSDKJson`
+
+**嵌套在对象字面量里的类实例过桥后会退化成 `UTSJSONObject`**，所以不能把 `SDKOptions` 实例塞进
+`initNIMSDK({ options: ... })`：
+
+```uts
+// ❌ 运行时可抛：java.lang.ClassCastException: UTSJSONObject cannot be cast to SDKOptions
+initNIMSDK({ options: new AndroidSDKOptions(), success: ..., fail: ... })
+```
+
+Android 端改用插件新增的 `initNIMSDKJson`：options 与回调**分参数**传递（当前 SDK 的签名），
+`AndroidSDKOptions` 由插件按 JSON 字段构造；options 里只支持可 JSON 化的字段，嵌套回调类配置会被判为不支持并返回 fail：
+
+```uts
+initNIMSDKJson({ appKey: appkey.value } as UTSJSONObject, onInitSuccess, onInitFail, null)
+```
+
+对应实现见 `uni_modules/nim-uts-sdk/utssdk/app-android/Initialize.uts` 的 `initNIMSDKJson`
+（市场版插件默认没有这个入口，需要按本工程内的版本使用）。iOS / 鸿蒙仍走 `initNIMSDK({ options })`。
+
+#### 3. 登录：`login` + JSON option
+
+SDK 已撤回 `loginJson`：Android 的 `login` 实现本身接收 `UTSJSONObject` 并解析数字枚举，
+其它端继续接收 typed option。页面统一传对象字面量即可：
+
+```uts
+loginService.login(accountId, token, { syncLevel: 0 })
+```
+
+#### 4. 消息：公共方法内部做 JSON 归一化
+
+当前 SDK 不再提供 `*Json` 系列，而是把 `sendMessage` / `replyMessage` / `getMessageList` 等公共方法的
+入参改为 `any`，插件内部用 `messageFromBridge` / `sendParamsFromBridge` 等函数判断入参是
+`UTSJSONObject` 还是原生对象，再逐字段还原：
+
+```uts
+const message = new V2NIMMessageCreate().createTextMessage(text)
+messageService.sendMessage(message, conversationId, null, null)
+messageService.getMessageList({ conversationId, limit: 20 })
+```
+
+页面不需要再手动转 `UTSJSONObject`，也不需要区分 Android / 其它端。
+
+#### 5. 群 / 好友：公共方法接收 `any` 并做字段级归一化
+
+群接口当前也已改成 `any`：`teamType`、群成员查询 option、`createTeam` 参数等都可以直接传数字 / 对象字面量，
+插件内部会归一化成原生枚举与强类型参数：
+
+```uts
+const service = new V2NIMTeamService()
+service.createTeam({ teamType: 1, name: 'demo', memberLimit: 100 }, null, null, null)
+service.getTeamInfo(teamId, 1)
+service.getTeamMemberList(teamId, 1, { limit: 20 })
+```
+
+好友接口同理：`addFriend` 的 `params` 已改为 `any`，插件内部会把数字 `addMode` 归一化成原生枚举：
+
+```uts
+friendService.addFriend(accountId, { addMode: 2, postscript: 'hi' })
+```
+
+#### 6. 其它
+
+- 当前 SDK 的跨桥策略是：`initNIMSDKJson` 单独处理初始化，Message / Friend / Team 等公共方法接收 `any`
+  并在插件内做字段级归一化；`loginJson`、`addFriendJson`、消息 `*Json`、群 builder 以及 Setting / Storage 等
+  `*Json` 镜像都已移除或不再需要。
+- 工程内 Android 专属逻辑（`#ifdef APP-ANDROID`）都加了 `TODO(iOS/Harmony/Web)` 注释；
+  当前只剩 `initNIMSDKJson` 一处平台差异。
+- 若真机遇到枚举入参抛 `ClassCastException`，说明对应接口还没有在插件内做字段级归一化，
+  需要在插件侧补 `*FromBridge` / `*FromJson` 转换，而不是在页面侧硬转类型。
+- 蒸汽模式下页面自身即可滚动，根节点 `scroll-view` 的 `scroll-y` 属性会告警，可按需改回 `view`。
+- 本地运行到 Android App 基座时，HBuilderX 会重新编译页面与 UTS 插件；发行 / 独立安装包需要重新出包，
+  仅更新 wgt 不会更新插件原生代码。
 
 ## 目录结构
 
