@@ -63,18 +63,18 @@
 		V2NIMLoginListener,
 		V2NIMLoginService
 	} from '@/uni_modules/nim-uts-sdk'
-	// 蒸汽模式（Android）下使用插件的扁平/JSON 入口，避免类实例跨桥。
-	// TODO(iOS/Harmony/Web): 补齐 initNIMSDKJson 后，删除这里的平台导入差异。
+	// 蒸汽模式（Android/Harmony）下使用插件的 JSON 初始化入口，避免 options 实例跨桥。
+	// iOS/Web 仍使用旧的 initNIMSDK(options)。
 	// #ifdef APP-ANDROID
 	import { initNIMSDKJson } from '@/uni_modules/nim-uts-sdk'
 	// #endif
-	// #ifndef APP-ANDROID
+	// #ifdef APP-HARMONY
+	import { initNIMSDKJson } from '@/uni_modules/nim-uts-sdk'
+	// #endif
+	// #ifdef APP-IOS
 	import { SDKOptions } from '@/uni_modules/nim-uts-sdk'
 	// #endif
-	// #ifdef APP-HARMONY
-	import { HarmonySDKOptions } from '@/uni_modules/nim-uts-sdk'
-	// #endif
-	import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from '../common/demo-utils.uts'
+	import { getStoredString, setStoredString } from '../common/demo-utils.uts'
 
 	type DemoLoginConfig = {
 		appKey : string,
@@ -93,7 +93,8 @@
 	const appkey = ref(getStoredString('demo_appkey', DEMO_LOGIN_CONFIG.appKey) as string)
 	const accountId = ref(getStoredString('demo_accountId', DEMO_LOGIN_CONFIG.accountId) as string)
 	const token = ref(getStoredString('demo_token', DEMO_LOGIN_CONFIG.token) as string)
-	const initialized = ref(getStoredBoolean('demo_initialized', false) as boolean)
+	// 初始化状态只代表当前进程的原生 SDK 实例，不能跨进程持久化。
+	const initialized = ref(false as boolean)
 	const loginStatus = ref('logout' as string)
 	const resultText = ref('暂无结果' as string)
 	const listenerText = ref('暂无监听内容' as string)
@@ -128,19 +129,10 @@
 		console.log(title, payloadText)
 	}
 
-	// 非 Android 端仍使用 SDKOptions 入口；Android 蒸汽模式走 initNIMSDKJson。
-	// #ifndef APP-ANDROID
+	// iOS 仍使用 SDKOptions 入口；Android/Harmony 蒸汽模式走 initNIMSDKJson。
+	// #ifdef APP-IOS
 	const buildOptions = () : SDKOptions => {
-		let options : SDKOptions
-		// #ifdef APP-HARMONY
-		const harmonyOptions = new HarmonySDKOptions()
-		harmonyOptions.appKey = appkey.value
-		options = harmonyOptions
-		// #endif
-		// #ifdef APP-IOS
-		options = { appKey: appkey.value } as SDKOptions
-		// #endif
-		return options
+		return { appKey: appkey.value } as SDKOptions
 	}
 	// #endif
 
@@ -169,7 +161,6 @@
 
 	const onInitSuccess = (res : NIMInitSuccess) => {
 		initialized.value = true
-		setStoredBoolean('demo_initialized', true)
 		setStoredString('demo_appkey', appkey.value)
 		printResult('initNIMSDK success', JSON.stringify(res))
 		uni.showToast({ title: '初始化成功', icon: 'success' })
@@ -181,16 +172,46 @@
 	}
 
 	const handleInit = () => {
+		if (initialized.value) {
+			uni.showToast({ title: '已初始化，无需重复初始化', icon: 'none' })
+			return
+		}
 		// 蒸汽模式（页面逻辑层是 JS）下，嵌套在对象里的 SDKOptions 实例过桥会退化成 UTSJSONObject，
 		// 调 initNIMSDK({ options: ... }) 会抛 ClassCastException；
-		// Android 改用 initNIMSDKJson：options 与回调分参数传递，插件内部按字段构造 SDKOptions。
-		// TODO(iOS/Harmony/Web): 补齐 initNIMSDKJson，当前仅 Android 走扁平初始化入口。
+		// Android/Harmony 改用 initNIMSDKJson：配置走 JSON，结果走 Promise。
 		// #ifdef APP-ANDROID
 		initNIMSDKJson({
 			appKey: appkey.value
-		} as UTSJSONObject, onInitSuccess, onInitFail, null)
+		} as UTSJSONObject).then((res) => {
+			if (res.code == 200) {
+				initialized.value = true
+				setStoredString('demo_appkey', appkey.value)
+				printResult('initNIMSDKJson success', JSON.stringify(res))
+				uni.showToast({ title: '初始化成功', icon: 'success' })
+			} else {
+				initialized.value = false
+				printResult('initNIMSDKJson fail', JSON.stringify(res))
+				uni.showToast({ title: res.desc.length > 0 ? res.desc : '初始化失败', icon: 'none' })
+			}
+		})
 		// #endif
-		// #ifndef APP-ANDROID
+		// #ifdef APP-HARMONY
+		initNIMSDKJson({
+			appKey: appkey.value
+		} as UTSJSONObject).then((res) => {
+			if (res.code == 200) {
+				initialized.value = true
+				setStoredString('demo_appkey', appkey.value)
+				printResult('initNIMSDKJson success', JSON.stringify(res))
+				uni.showToast({ title: '初始化成功', icon: 'success' })
+			} else {
+				initialized.value = false
+				printResult('initNIMSDKJson fail', JSON.stringify(res))
+				uni.showToast({ title: res.desc.length > 0 ? res.desc : '初始化失败', icon: 'none' })
+			}
+		})
+		// #endif
+		// #ifdef APP-IOS
 		initNIMSDK({
 			options: buildOptions(),
 			success: onInitSuccess,
