@@ -31,6 +31,9 @@
 			</view>
 			<view class="button-row">
 				<button class="action-btn action-primary" :disabled="!initialized" @tap="handleLogin">登录</button>
+				<!-- #ifdef APP-ANDROID || APP-HARMONY -->
+				<button class="action-btn" :disabled="!initialized" @tap="handleLoginWithProviders">动态 Token 登录</button>
+				<!-- #endif -->
 				<button class="action-btn" @tap="handleLogout">登出</button>
 			</view>
 			<text class="state-text" :class="loginStatus === 'logined' ? 'state-on' : 'state-off'">
@@ -242,6 +245,36 @@
 			printResult('login', JSON.stringify(res))
 		})
 	}
+
+	// #ifdef APP-ANDROID || APP-HARMONY
+	// 动态 token / 第三方回调鉴权的 provider 必须作为顶层函数参数传入，不能塞进 option。
+	// 当前测试 appkey 未开启动态 token 时，原生会返回 invalid token，但调用链可以正常走通。
+	const handleLoginWithProviders = () => {
+		if (!initialized.value) {
+			uni.showToast({ title: '请先初始化', icon: 'none' })
+			return
+		}
+		ensureLoginService()
+		// provider 是同步函数，提前把当前 token 捕获成局部变量，避免 vapor 下直接读 ref。
+		const currentToken = token.value
+		loginService!.loginWithProviders(accountId.value, currentToken, {
+			authType: 1,
+			syncLevel: DATA_SYNC_LEVEL_FULL
+		} as UTSJSONObject, (currentAccountId : string) : string => {
+			return currentToken
+		}, null).then((res) => {
+			if (res.code == 200) {
+				loginStatus.value = 'logined'
+				setStoredString('demo_accountId', accountId.value)
+				setStoredString('demo_token', token.value)
+				uni.showToast({ title: '动态 Token 登录成功', icon: 'success' })
+			} else {
+				uni.showToast({ title: res.desc.length > 0 ? res.desc : '动态 Token 登录失败', icon: 'none' })
+			}
+			printResult('loginWithProviders', JSON.stringify(res))
+		})
+	}
+	// #endif
 
 	const handleLogout = () => {
 		const service = loginService
